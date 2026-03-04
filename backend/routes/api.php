@@ -88,6 +88,9 @@ Route::prefix('v1')->group(function () {
             Route::post('clusters/{cluster}/ignore', [KubernetesController::class, 'ignore']);
             Route::get('clusters/{cluster}/ignored', [KubernetesController::class, 'ignored']);
             Route::delete('clusters/{cluster}/ignored/{radarIgnore}', [KubernetesController::class, 'unignore']);
+
+            // Database inspection (not cluster-scoped — connects directly)
+            Route::post('list-databases', [KubernetesController::class, 'listDatabases']);
         });
     });
 });

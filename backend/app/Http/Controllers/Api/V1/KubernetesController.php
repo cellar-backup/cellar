@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\RadarCluster;
 use App\Models\RadarIgnore;
 use App\Models\Source;
+use App\Services\DatabaseInspector;
 use App\Services\KubernetesDiscovery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -336,5 +337,34 @@ class KubernetesController extends Controller
         $radarIgnore->delete();
 
         return response()->json(null, 204);
+    }
+
+    /**
+     * List databases on a discovered endpoint.
+     *
+     * Connects to the target DB host and returns available database names
+     * so the user can pick which ones to back up.
+     */
+    public function listDatabases(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'source_type' => 'required|string|in:postgresql,mysql,mariadb,mongodb',
+            'host' => 'required|string|max:500',
+            'port' => 'required|integer|min:1|max:65535',
+            'username' => 'nullable|string|max:255',
+            'password' => 'nullable|string|max:1000',
+        ]);
+
+        $inspector = new DatabaseInspector;
+
+        $result = $inspector->listDatabases(
+            sourceType: $data['source_type'],
+            host: $data['host'],
+            port: $data['port'],
+            username: $data['username'] ?? null,
+            password: $data['password'] ?? null,
+        );
+
+        return response()->json($result);
     }
 }

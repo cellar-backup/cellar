@@ -293,6 +293,31 @@ export const useRadarStore = defineStore("radar", () => {
     ignored.value = ignored.value.filter((i) => i.id !== id);
   }
 
+  /**
+   * List databases on a discovered endpoint.
+   * Returns { databases: string[], error: string|null }
+   */
+  async function listDatabases(
+    sourceType: string,
+    host: string,
+    port: number,
+    username?: string,
+    password?: string,
+  ): Promise<{ databases: string[]; error: string | null }> {
+    try {
+      const { data } = await api.post("/kubernetes/list-databases", {
+        source_type: sourceType,
+        host,
+        port,
+        username: username || undefined,
+        password: password || undefined,
+      });
+      return data;
+    } catch {
+      return { databases: [], error: "Failed to connect to database." };
+    }
+  }
+
   return {
     // Cluster state
     clusters,
@@ -319,5 +344,6 @@ export const useRadarStore = defineStore("radar", () => {
     ignoreResource,
     fetchIgnored,
     unignore,
+    listDatabases,
   };
 });

@@ -248,7 +248,7 @@ class KubernetesDiscovery
             }
         }
 
-        // Sort endpoints: Service first, then Pod, then PVC
+        // Sort endpoints: Service first, then Pod, then PVC (no sub-ordering — user picks)
         $kindOrder = ['Service' => 0, 'Pod' => 1, 'PVC' => 2];
         foreach ($groups as &$g) {
             usort($g['endpoints'], fn ($a, $b) => ($kindOrder[$a['kind']] ?? 9) <=> ($kindOrder[$b['kind']] ?? 9));
@@ -582,4 +582,5 @@ class KubernetesDiscovery
             default => 0,
         };
     }
+
 }

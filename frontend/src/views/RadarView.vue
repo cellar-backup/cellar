@@ -60,6 +60,9 @@ const importReviewItems = ref<
     username: string;
     password: string;
     database_name: string;
+    detectedDatabases: string[] | null;
+    dbDetectLoading: boolean;
+    dbDetectError: string | null;
   }>
 >([]);
 
@@ -234,9 +237,41 @@ async function importSelected() {
       username: usernameCred?.value ?? "",
       password: passwordCred?.value ?? "",
       database_name: dbNameCred?.value ?? "",
+      detectedDatabases: null,
+      dbDetectLoading: false,
+      dbDetectError: null,
     };
   });
   showImportReview.value = true;
+}
+
+async function detectDatabases(item: (typeof importReviewItems.value)[0]) {
+  if (!item.host || !item.port) return;
+  if (item.resource.source_type === "directory" || item.resource.source_type === "redis") return;
+
+  item.dbDetectLoading = true;
+  item.dbDetectError = null;
+  item.detectedDatabases = null;
+
+  const result = await store.listDatabases(
+    item.resource.source_type,
+    item.host,
+    item.port,
+    item.username || undefined,
+    item.password || undefined,
+  );
+
+  item.dbDetectLoading = false;
+  if (result.error) {
+    item.dbDetectError = result.error;
+    item.detectedDatabases = [];
+  } else {
+    item.detectedDatabases = result.databases;
+    // Auto-select first if database_name is empty
+    if (!item.database_name && result.databases.length > 0) {
+      item.database_name = result.databases[0];
+    }
+  }
 }
 
 function bestHost(r: DiscoveredResource): string {
@@ -785,7 +820,7 @@ onMounted(() => {
             <!-- Credentials (only for databases, not PVCs) -->
             <div
               v-if="item.resource.source_type !== 'directory'"
-              class="mt-3 grid grid-cols-3 gap-2"
+              class="mt-3 grid grid-cols-2 gap-2"
             >
               <div>
                 <label class="block text-xs font-medium text-text-muted mb-0.5">
@@ -809,17 +844,64 @@ onMounted(() => {
                   class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
                 />
               </div>
-              <div>
-                <label class="block text-xs font-medium text-text-muted mb-0.5">
+            </div>
+
+            <!-- Database selection (not for PVC / Redis) -->
+            <div
+              v-if="item.resource.source_type !== 'directory' && item.resource.source_type !== 'redis'"
+              class="mt-3"
+            >
+              <div class="flex items-center gap-2 mb-1">
+                <label class="block text-xs font-medium text-text-muted">
                   Database
                 </label>
-                <input
-                  v-model="item.database_name"
-                  type="text"
-                  placeholder="optional"
-                  class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
-                />
+                <button
+                  :disabled="item.dbDetectLoading || !item.host || !item.port"
+                  class="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition-colors"
+                  :class="item.dbDetectLoading
+                    ? 'text-text-muted cursor-wait'
+                    : 'text-primary hover:bg-primary/10 cursor-pointer'"
+                  @click="detectDatabases(item)"
+                >
+                  <Loader2 v-if="item.dbDetectLoading" class="h-3 w-3 animate-spin" />
+                  <Database v-else class="h-3 w-3" />
+                  {{ item.dbDetectLoading ? 'Detecting…' : 'Detect databases' }}
+                </button>
               </div>
+
+              <!-- Detected databases list -->
+              <div
+                v-if="item.detectedDatabases && item.detectedDatabases.length > 0"
+                class="flex flex-wrap gap-1.5 mb-1.5"
+              >
+                <button
+                  v-for="db in item.detectedDatabases"
+                  :key="db"
+                  class="rounded-lg border px-2.5 py-1 text-xs font-mono font-medium transition-colors"
+                  :class="item.database_name === db
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-text-muted hover:border-primary/30'"
+                  @click="item.database_name = db"
+                >
+                  {{ db }}
+                </button>
+              </div>
+
+              <!-- Detection error -->
+              <p
+                v-if="item.dbDetectError"
+                class="text-xs text-warning mb-1"
+              >
+                {{ item.dbDetectError }}
+              </p>
+
+              <!-- Manual input (always available as fallback) -->
+              <input
+                v-model="item.database_name"
+                type="text"
+                placeholder="Database name (or detect above)"
+                class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+              />
             </div>
 
             <!-- Secrets hint -->
@@ -1014,7 +1096,7 @@ onMounted(() => {
                   :title="`${ep.kind}: ${ep.resource_name}`"
                   @click.stop="selectedEndpoints[resource.resource_key] = idx"
                 >
-                  {{ ep.kind }}
+                  {{ ep.kind }}<template v-if="ep.service_type && ep.kind === 'Service'">·{{ ep.service_type === 'LoadBalancer' ? 'LB' : ep.service_type === 'NodePort' ? 'NP' : ep.service_type === 'ExternalName' ? 'Ext' : 'CIP' }}</template>
                 </button>
               </template>
               <span
