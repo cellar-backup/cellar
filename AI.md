@@ -568,21 +568,31 @@ Key features:
 - **Service scanning** — inspects service ports for database endpoints; uses `app.kubernetes.io/name` or `app` labels (and selector) to resolve the canonical app name so that multiple services (ClusterIP, LoadBalancer, etc.) for the same database group together
 - **PVC scanning** — lists bound PersistentVolumeClaims as potential directory backup targets
 - **External access detection** — for services, detects NodePort, LoadBalancer (ingress IP/hostname), ExternalName, and `spec.externalIPs`. Returns `external_host`, `external_port`, `node_port`, `service_type` alongside internal host/port so the UI can suggest reachable endpoints.
-- **Secret credential discovery** — scans Opaque secrets for known credential keys (password, username, database variants for MariaDB/MySQL/PostgreSQL/MongoDB/Redis). Matches secrets to discovered resources via `app.kubernetes.io/name` label. Returns `credentials[]` array per resource with `{secret_name, key, value}`.
+- **Secret credential discovery** — scans Opaque secrets for known credential keys (password, username, database variants for MariaDB/MySQL/PostgreSQL/MongoDB/Redis). Matches secrets to discovered resources via `app.kubernetes.io/name` label, with **name-based fallback**: if a secret name starts with a discovered app name (e.g., `mariadb-credentials` → `mariadb`), it is associated even without labels. `discoverSecrets()` accepts `$appNamesByNs` (keyed by namespace) for this heuristic. Returns `credentials[]` array per resource with `{secret_name, key, value}`.
 - **Deduplication & grouping** — groups Pod + Service entries for the same database (`namespace:canonicalName:source_type` key) into a single resource with an `endpoints[]` array. Each endpoint carries `resource_name` (actual K8s resource name). Endpoints sorted neutrally: Service → Pod → PVC (no sub-ordering within services — user picks). Top-level fields prefer Service.
 - Returns discovered resources with host, port, namespace, kind, image, external access fields, `endpoints[]` array, and `credentials[]` array
 - Factory method: `fromCluster(RadarCluster)` — creates instance from a saved cluster, writing kubeconfig content to a temp file (cleaned up in `__destruct`)
 
 ### `DatabaseInspector`
 
-Connects to discovered database endpoints and lists available databases. Used by Radar’s import review to let users pick which databases to back up.
+Lists available databases on discovered endpoints using a **dual strategy**. Used by Radar's import review to let users pick which databases to back up.
 
-- **PostgreSQL** — connects via PDO (`pgsql`), queries `pg_database`, filters system DBs (template0/1, postgres)
-- **MySQL / MariaDB** — connects via PDO (`mysql`), `SHOW DATABASES`, filters system DBs (information_schema, mysql, performance_schema, sys)
-- **MongoDB** — uses `mongosh` CLI if available, `listDatabases` admin command, filters system DBs (admin, config, local)
+**Strategy 1 — Direct PDO** (tried first when host is externally reachable, skipped for `.svc.cluster.local` hosts):
+- **PostgreSQL** — PDO `pgsql`, queries `pg_database`
+- **MySQL / MariaDB** — PDO `mysql`, `SHOW DATABASES`
+
+**Strategy 2 — kubectl exec fallback** (used when Cellar runs outside the K8s cluster, e.g., Docker on host):
+- Runs DB CLI inside the discovered pod via `kubectl exec <pod> -n <namespace> -- sh -c "<query_cmd>"`
+- `KUBECTL_COMMANDS` constant defines per-engine commands: `psql -U %s -d postgres -t -A -c "SELECT datname..."` for PostgreSQL, `mysql -u %s %s -N -e "SHOW DATABASES"` for MySQL/MariaDB
+- `buildKubectlExecCommand()` constructs the full command array including kubeconfig and context from `$kubectlContext`
+- Uses Laravel `Process::timeout(15)->run()` for execution
+
+**Common:**
+- **MongoDB** — `mongosh` CLI, `listDatabases` admin command
 - **Redis** — not supported (no concept of named databases)
-- Returns `{databases: string[], error: string|null}` with friendly error messages for connection refused / timeout / auth failure
-- System DB exclusion lists defined in `SYSTEM_DBS` constant
+- Returns `{databases: string[], error: string|null}` with friendly error messages
+- System DB exclusion in `SYSTEM_DBS` constant (template0/1, information_schema, mysql, performance_schema, sys, etc.)
+- `listDatabases(type, host, port, user, pass, kubectlContext?)` — public API, orchestrates both strategies
 
 ---
 
@@ -655,6 +665,7 @@ Connects to discovered database endpoints and lists available databases. Used by
 - `ignore` — Persists a resource to `RadarIgnore` (scoped to cluster) so it no longer appears in discovery.
 - `ignored` — Lists ignored resources for a cluster.
 - `unignore` — Removes a resource from the ignore list.
+- `listDatabases` — Cluster-scoped (`clusters/{cluster}/list-databases`). Accepts `source_type`, `host`, `port`, `username`, `password`, `pod_name`, `namespace`. Builds `$kubectlContext` (temp kubeconfig, kubectl path, context) from the cluster and passes it to `DatabaseInspector` for kubectl exec fallback.
 
 ---
 
@@ -724,7 +735,7 @@ Auth guard: on first load validates token via `GET /auth/me`; subsequent navigat
 
 **`sources.ts`** — Manages Source[]. Methods: `fetchSources()`, `quickAdd(payload)`, `getSource(id)`, `updateSource(id, payload)`, `testConnection(id)`, `deleteSource(id)`.
 
-**`radar.ts`** — Manages multi-cluster K8s Radar state. Types: `ResourceEndpoint` (kind, resource_name, host, port, external fields, image), `DiscoveredCredential` (secret_name, key, value), `DiscoveredResource` (includes `endpoints[]` and `credentials[]`), `ImportOverride` (per-resource host/port/username/password/database_name overrides). Tracks saved clusters, active cluster selection, discovered resources, ignored list. Cluster CRUD: `fetchClusters()`, `createCluster(name, kubeconfigFile?, context?, defaultNamespace?)`, `updateCluster(...)`, `deleteCluster(id)`, `selectCluster(id)`. Discovery (cluster-scoped): `testConnection()`, `discover()`, `importResources(selected, overrides?)`, `ignoreResource(resource, reason?)`, `fetchIgnored()`, `unignore(id)`. Database inspection: `listDatabases(sourceType, host, port, username?, password?)`. Uses `FormData` with multipart upload for kubeconfig files.
+**`radar.ts`** — Manages multi-cluster K8s Radar state. Types: `ResourceEndpoint` (kind, resource_name, host, port, external fields, image), `DiscoveredCredential` (secret_name, key, value), `DiscoveredResource` (includes `endpoints[]` and `credentials[]`), `ImportOverride` (per-resource host/port/username/password/database_name overrides). Tracks saved clusters, active cluster selection, discovered resources, ignored list. Cluster CRUD: `fetchClusters()`, `createCluster(name, kubeconfigFile?, context?, defaultNamespace?)`, `updateCluster(...)`, `deleteCluster(id)`, `selectCluster(id)`. Discovery (cluster-scoped): `testConnection()`, `discover()`, `importResources(selected, overrides?)`, `ignoreResource(resource, reason?)`, `fetchIgnored()`, `unignore(id)`. Database inspection: `listDatabases(sourceType, host, port, username?, password?, podName?, podNamespace?)` — calls cluster-scoped endpoint, passes pod info for kubectl exec targeting. Uses `FormData` with multipart upload for kubeconfig files.
 
 ### Views (9 files)
 
