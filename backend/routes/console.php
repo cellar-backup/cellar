@@ -3,6 +3,7 @@
 use App\Jobs\RunBackup;
 use App\Jobs\RunPrune;
 use App\Models\BackupPlan;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 
 /*
@@ -46,6 +47,12 @@ Schedule::call(function () {
         }
     }
 })->everyMinute()->name('cellar:dispatch-scheduled-prunes')->withoutOverlapping();
+
+// Reconcile the archives table with borg repos daily at 03:00
+Schedule::command('cellar:sync-archives')
+    ->dailyAt('03:00')
+    ->name('cellar:sync-archives')
+    ->withoutOverlapping();
 
 /*
 |--------------------------------------------------------------------------

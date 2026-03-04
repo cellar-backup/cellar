@@ -56,6 +56,8 @@ function typeLabel(type: string) {
       return "Verify";
     case "restore":
       return "Restore";
+    case "export":
+      return "Export";
     default:
       return type;
   }
@@ -83,7 +85,7 @@ function duration(start: string | null, end: string | null) {
     <div>
       <h1 class="text-2xl font-semibold text-text-primary">Jobs</h1>
       <p class="mt-1 text-text-muted">
-        History of all backup, prune, and verify operations.
+        History of all backup, restore, export, prune, and verify operations.
       </p>
     </div>
 

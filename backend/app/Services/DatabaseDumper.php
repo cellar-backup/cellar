@@ -46,6 +46,7 @@ class DatabaseDumper
 
         $outFile = "{$outputDir}/{$database}.sql.gz";
 
+        // Custom format (-Fc) for best borg dedup and compression
         $cmd = ['pg_dump', '-h', $host, '-p', $port, '-U', $user, '--no-password', '-Fc', '-f', $outFile];
         $cmd = array_merge($cmd, (array) $extra, [$database]);
 
