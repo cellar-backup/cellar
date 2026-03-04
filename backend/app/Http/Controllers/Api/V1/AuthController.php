@@ -32,9 +32,6 @@ class AuthController extends Controller
             ]);
         }
 
-        // Revoke previous tokens for this device/session
-        $user->tokens()->where('name', 'spa')->delete();
-
         $token = $user->createToken('spa')->plainTextToken;
 
         return response()->json([

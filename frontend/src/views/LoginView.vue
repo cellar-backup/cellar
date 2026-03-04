@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { Wine } from "lucide-vue-next";
@@ -8,9 +8,16 @@ const auth = useAuthStore();
 const router = useRouter();
 
 const username = ref("admin");
-const password = ref("admin");
+const password = ref("");
 const error = ref("");
 const loading = ref(false);
+
+// If already authenticated, skip the login screen
+onMounted(() => {
+  if (auth.isAuthenticated) {
+    router.replace("/");
+  }
+});
 
 async function handleLogin() {
   error.value = "";

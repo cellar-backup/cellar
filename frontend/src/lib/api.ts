@@ -16,15 +16,21 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor — handle 401 (token expired or revoked)
+// Response interceptor — handle 401 (token expired or revoked).
+// Uses soft redirect via router instead of destructive window.location.href.
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("cellar_access_token");
-      localStorage.removeItem("cellar_user");
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
+      // Lazy-import to avoid circular dependency
+      const { useAuthStore } = await import("@/stores/auth");
+      const auth = useAuthStore();
+      auth.clearSession();
+
+      // Soft-redirect via router (no full page reload)
+      const { default: router } = await import("@/router");
+      if (router.currentRoute.value.name !== "login") {
+        router.push({ name: "login" });
       }
     }
     return Promise.reject(error);

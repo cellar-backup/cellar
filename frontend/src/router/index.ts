@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { useAuthStore } from "@/stores/auth";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -42,10 +43,22 @@ const router = createRouter({
   ],
 });
 
-// Auth guard
-router.beforeEach((to) => {
-  const token = localStorage.getItem("cellar_access_token");
-  if (!to.meta.public && !token) {
+// Auth guard — validates the token on first navigation (page load / refresh),
+// then trusts the in-memory flag for subsequent in-app navigations.
+router.beforeEach(async (to) => {
+  if (to.meta.public) return;
+
+  const auth = useAuthStore();
+
+  // On first load, validate the stored token against the backend
+  if (!auth.ready) {
+    const valid = await auth.checkAuth();
+    if (!valid) return { name: "login" };
+    return;
+  }
+
+  // Subsequent navigations — just check in-memory state
+  if (!auth.isAuthenticated) {
     return { name: "login" };
   }
 });
