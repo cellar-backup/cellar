@@ -2,7 +2,6 @@
 import { ref, computed } from "vue";
 import {
   Database,
-  Server,
   FolderOpen,
   Container,
   CircleCheck,
