@@ -247,11 +247,18 @@ async function importSelected() {
 
 async function detectDatabases(item: (typeof importReviewItems.value)[0]) {
   if (!item.host || !item.port) return;
-  if (item.resource.source_type === "directory" || item.resource.source_type === "redis") return;
+  if (
+    item.resource.source_type === "directory" ||
+    item.resource.source_type === "redis"
+  )
+    return;
 
   item.dbDetectLoading = true;
   item.dbDetectError = null;
   item.detectedDatabases = null;
+
+  // Find a Pod endpoint for kubectl exec fallback
+  const podEp = item.resource.endpoints?.find((ep) => ep.kind === "Pod");
 
   const result = await store.listDatabases(
     item.resource.source_type,
@@ -259,6 +266,8 @@ async function detectDatabases(item: (typeof importReviewItems.value)[0]) {
     item.port,
     item.username || undefined,
     item.password || undefined,
+    podEp?.resource_name,
+    item.resource.namespace,
   );
 
   item.dbDetectLoading = false;
@@ -848,7 +857,10 @@ onMounted(() => {
 
             <!-- Database selection (not for PVC / Redis) -->
             <div
-              v-if="item.resource.source_type !== 'directory' && item.resource.source_type !== 'redis'"
+              v-if="
+                item.resource.source_type !== 'directory' &&
+                item.resource.source_type !== 'redis'
+              "
               class="mt-3"
             >
               <div class="flex items-center gap-2 mb-1">
@@ -858,29 +870,38 @@ onMounted(() => {
                 <button
                   :disabled="item.dbDetectLoading || !item.host || !item.port"
                   class="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition-colors"
-                  :class="item.dbDetectLoading
-                    ? 'text-text-muted cursor-wait'
-                    : 'text-primary hover:bg-primary/10 cursor-pointer'"
+                  :class="
+                    item.dbDetectLoading
+                      ? 'text-text-muted cursor-wait'
+                      : 'text-primary hover:bg-primary/10 cursor-pointer'
+                  "
                   @click="detectDatabases(item)"
                 >
-                  <Loader2 v-if="item.dbDetectLoading" class="h-3 w-3 animate-spin" />
+                  <Loader2
+                    v-if="item.dbDetectLoading"
+                    class="h-3 w-3 animate-spin"
+                  />
                   <Database v-else class="h-3 w-3" />
-                  {{ item.dbDetectLoading ? 'Detecting…' : 'Detect databases' }}
+                  {{ item.dbDetectLoading ? "Detecting…" : "Detect databases" }}
                 </button>
               </div>
 
               <!-- Detected databases list -->
               <div
-                v-if="item.detectedDatabases && item.detectedDatabases.length > 0"
+                v-if="
+                  item.detectedDatabases && item.detectedDatabases.length > 0
+                "
                 class="flex flex-wrap gap-1.5 mb-1.5"
               >
                 <button
                   v-for="db in item.detectedDatabases"
                   :key="db"
                   class="rounded-lg border px-2.5 py-1 text-xs font-mono font-medium transition-colors"
-                  :class="item.database_name === db
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border text-text-muted hover:border-primary/30'"
+                  :class="
+                    item.database_name === db
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border text-text-muted hover:border-primary/30'
+                  "
                   @click="item.database_name = db"
                 >
                   {{ db }}
@@ -888,10 +909,7 @@ onMounted(() => {
               </div>
 
               <!-- Detection error -->
-              <p
-                v-if="item.dbDetectError"
-                class="text-xs text-warning mb-1"
-              >
+              <p v-if="item.dbDetectError" class="text-xs text-warning mb-1">
                 {{ item.dbDetectError }}
               </p>
 
@@ -1096,7 +1114,18 @@ onMounted(() => {
                   :title="`${ep.kind}: ${ep.resource_name}`"
                   @click.stop="selectedEndpoints[resource.resource_key] = idx"
                 >
-                  {{ ep.kind }}<template v-if="ep.service_type && ep.kind === 'Service'">·{{ ep.service_type === 'LoadBalancer' ? 'LB' : ep.service_type === 'NodePort' ? 'NP' : ep.service_type === 'ExternalName' ? 'Ext' : 'CIP' }}</template>
+                  {{ ep.kind
+                  }}<template v-if="ep.service_type && ep.kind === 'Service'"
+                    >·{{
+                      ep.service_type === "LoadBalancer"
+                        ? "LB"
+                        : ep.service_type === "NodePort"
+                          ? "NP"
+                          : ep.service_type === "ExternalName"
+                            ? "Ext"
+                            : "CIP"
+                    }}</template
+                  >
                 </button>
               </template>
               <span

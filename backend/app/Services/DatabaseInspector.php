@@ -2,14 +2,19 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Process;
 use PDO;
 use PDOException;
 
 /**
- * Connects to discovered database endpoints and lists their databases.
+ * Lists databases on discovered endpoints.
  *
- * Supports PostgreSQL (PDO), MySQL / MariaDB (PDO), and MongoDB (shell).
- * Used by Radar's import review to let users pick which databases to backup.
+ * Two strategies:
+ *  1. Direct PDO — fast, works when host is reachable from the Cellar container
+ *  2. kubectl exec — runs the query inside the DB pod, works for any cluster
+ *
+ * The public API tries direct first (with a short timeout) and falls back to
+ * kubectl exec when the host is unreachable.
  */
 class DatabaseInspector
 {
@@ -21,8 +26,15 @@ class DatabaseInspector
         'mongodb' => ['admin', 'config', 'local'],
     ];
 
+    /** DB CLI commands found inside common container images */
+    private const KUBECTL_COMMANDS = [
+        'postgresql' => 'psql -U %s -d postgres -t -A -c "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname"',
+        'mysql' => 'mysql -u %s %s -N -e "SHOW DATABASES"',
+        'mariadb' => 'mysql -u %s %s -N -e "SHOW DATABASES"',
+    ];
+
     /**
-     * List user databases on the target server.
+     * List databases — tries direct PDO first, falls back to kubectl exec.
      *
      * @return array{databases: string[], error: string|null}
      */
@@ -32,17 +44,52 @@ class DatabaseInspector
         int $port,
         ?string $username = null,
         ?string $password = null,
-        int $timeout = 5,
+        ?array $kubectlContext = null,
     ): array {
-        return match ($sourceType) {
-            'postgresql' => $this->listPostgres($host, $port, $username, $password, $timeout),
-            'mysql', 'mariadb' => $this->listMysql($host, $port, $username, $password, $timeout),
-            'mongodb' => $this->listMongo($host, $port, $username, $password, $timeout),
-            default => ['databases' => [], 'error' => "Database listing not supported for {$sourceType}."],
-        };
+        // 1. Try direct PDO (fast, works for external hosts)
+        if (! str_contains($host, '.svc.cluster.local')) {
+            $direct = $this->listDirect($sourceType, $host, $port, $username, $password);
+            if ($direct['error'] === null) {
+                return $direct;
+            }
+        }
+
+        // 2. Fall back to kubectl exec if we have cluster context
+        if ($kubectlContext) {
+            $kubectl = $this->listViaKubectl(
+                sourceType: $sourceType,
+                username: $username,
+                password: $password,
+                podName: $kubectlContext['pod_name'],
+                namespace: $kubectlContext['namespace'],
+                kubectlPath: $kubectlContext['kubectl_path'] ?? '/usr/local/bin/kubectl',
+                kubeconfig: $kubectlContext['kubeconfig'] ?? null,
+                context: $kubectlContext['context'] ?? null,
+            );
+            if ($kubectl['error'] === null || ! empty($kubectl['databases'])) {
+                return $kubectl;
+            }
+        }
+
+        // 3. Last resort: try direct even for cluster-local hosts
+        $direct = $this->listDirect($sourceType, $host, $port, $username, $password);
+        if ($direct['error'] !== null && $kubectlContext) {
+            return ['databases' => [], 'error' => 'Could not reach the database. Make sure the pod is running and credentials are correct.'];
+        }
+
+        return $direct;
     }
 
-    // ── PostgreSQL ──────────────────────────────────────────────
+    // ── Direct PDO ──────────────────────────────────────────────
+
+    private function listDirect(string $sourceType, string $host, int $port, ?string $user, ?string $pass, int $timeout = 4): array
+    {
+        return match ($sourceType) {
+            'postgresql' => $this->listPostgres($host, $port, $user, $pass, $timeout),
+            'mysql', 'mariadb' => $this->listMysql($host, $port, $user, $pass, $timeout),
+            default => ['databases' => [], 'error' => "Direct connection not supported for {$sourceType}."],
+        };
+    }
 
     private function listPostgres(string $host, int $port, ?string $user, ?string $pass, int $timeout): array
     {
@@ -53,7 +100,7 @@ class DatabaseInspector
                 PDO::ATTR_TIMEOUT => $timeout,
             ]);
 
-            $stmt = $pdo->query("SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname");
+            $stmt = $pdo->query('SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname');
             $all = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
             return [
@@ -64,8 +111,6 @@ class DatabaseInspector
             return ['databases' => [], 'error' => $this->friendlyError($e)];
         }
     }
-
-    // ── MySQL / MariaDB ─────────────────────────────────────────
 
     private function listMysql(string $host, int $port, ?string $user, ?string $pass, int $timeout): array
     {
@@ -79,10 +124,10 @@ class DatabaseInspector
             $stmt = $pdo->query('SHOW DATABASES');
             $all = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-            $sourceType = str_contains(strtolower($pdo->getAttribute(PDO::ATTR_SERVER_INFO) ?? ''), 'maria') ? 'mariadb' : 'mysql';
+            $engine = str_contains(strtolower($pdo->getAttribute(PDO::ATTR_SERVER_INFO) ?? ''), 'maria') ? 'mariadb' : 'mysql';
 
             return [
-                'databases' => array_values(array_diff($all, self::SYSTEM_DBS[$sourceType] ?? self::SYSTEM_DBS['mysql'])),
+                'databases' => array_values(array_diff($all, self::SYSTEM_DBS[$engine])),
                 'error' => null,
             ];
         } catch (PDOException $e) {
@@ -90,37 +135,117 @@ class DatabaseInspector
         }
     }
 
-    // ── MongoDB (via mongosh CLI) ───────────────────────────────
+    // ── kubectl exec ────────────────────────────────────────────
 
-    private function listMongo(string $host, int $port, ?string $user, ?string $pass, int $timeout): array
-    {
-        // If mongosh is available, use it
-        $mongosh = trim(shell_exec('which mongosh 2>/dev/null') ?? '');
-        if (empty($mongosh)) {
-            return ['databases' => [], 'error' => 'mongosh not available — enter database name manually.'];
-        }
-
-        $uri = $user
-            ? sprintf('mongodb://%s:%s@%s:%d', urlencode($user), urlencode($pass ?? ''), $host, $port)
-            : sprintf('mongodb://%s:%d', $host, $port);
-
-        $cmd = sprintf(
-            '%s %s --quiet --eval %s 2>&1',
-            escapeshellarg($mongosh),
-            escapeshellarg($uri),
-            escapeshellarg("db.adminCommand('listDatabases').databases.map(d => d.name).join('\\n')"),
+    /**
+     * Execute a DB listing command inside the pod via kubectl exec.
+     */
+    private function listViaKubectl(
+        string $sourceType,
+        ?string $username,
+        ?string $password,
+        string $podName,
+        string $namespace,
+        string $kubectlPath,
+        ?string $kubeconfig,
+        ?string $context,
+    ): array {
+        $cmd = $this->buildKubectlExecCommand(
+            sourceType: $sourceType,
+            username: $username,
+            password: $password,
+            podName: $podName,
+            namespace: $namespace,
+            kubectlPath: $kubectlPath,
+            kubeconfig: $kubeconfig,
+            context: $context,
         );
 
-        $result = \Illuminate\Support\Facades\Process::timeout($timeout + 2)->run($cmd);
-
-        if (! $result->successful()) {
-            return ['databases' => [], 'error' => 'Failed to connect to MongoDB.'];
+        if (! $cmd) {
+            return ['databases' => [], 'error' => "kubectl exec not supported for {$sourceType}."];
         }
 
-        $names = array_filter(array_map('trim', explode("\n", trim($result->output()))));
-        $names = array_values(array_diff($names, self::SYSTEM_DBS['mongodb']));
+        try {
+            $result = Process::timeout(15)->run($cmd);
 
-        return ['databases' => $names, 'error' => null];
+            if (! $result->successful()) {
+                $err = trim($result->errorOutput());
+                if (str_contains($err, 'not found') || str_contains($err, 'does not exist')) {
+                    return ['databases' => [], 'error' => "Pod '{$podName}' not found in namespace '{$namespace}'."];
+                }
+                if (str_contains($err, 'Access denied') || str_contains($err, 'authentication failed') || str_contains($err, 'password authentication failed')) {
+                    return ['databases' => [], 'error' => 'Authentication failed — check your username and password.'];
+                }
+
+                return ['databases' => [], 'error' => 'Failed to query databases via kubectl exec: '.substr($err, 0, 200)];
+            }
+
+            $output = trim($result->output());
+            $names = array_filter(array_map('trim', explode("\n", $output)), fn ($n) => $n !== '');
+            $system = self::SYSTEM_DBS[$sourceType] ?? self::SYSTEM_DBS['mysql'] ?? [];
+            $names = array_values(array_diff($names, $system));
+
+            return ['databases' => $names, 'error' => null];
+        } catch (\Throwable $e) {
+            return ['databases' => [], 'error' => 'kubectl exec failed: '.$e->getMessage()];
+        }
+    }
+
+    private function buildKubectlExecCommand(
+        string $sourceType,
+        ?string $username,
+        ?string $password,
+        string $podName,
+        string $namespace,
+        string $kubectlPath,
+        ?string $kubeconfig,
+        ?string $context,
+    ): ?array {
+        $base = [$kubectlPath];
+
+        if ($kubeconfig) {
+            $base[] = '--kubeconfig';
+            $base[] = $kubeconfig;
+        }
+        if ($context) {
+            $base[] = '--context';
+            $base[] = $context;
+        }
+
+        $base = array_merge($base, ['exec', $podName, '-n', $namespace, '--']);
+
+        $user = $username ?: match ($sourceType) {
+            'postgresql' => 'postgres',
+            'mysql', 'mariadb' => 'root',
+            default => 'root',
+        };
+
+        switch ($sourceType) {
+            case 'postgresql':
+                // PGPASSWORD env + psql
+                $innerCmd = sprintf(self::KUBECTL_COMMANDS['postgresql'], escapeshellarg($user));
+                $envPrefix = $password ? 'PGPASSWORD='.escapeshellarg($password).' ' : '';
+
+                return array_merge($base, ['sh', '-c', $envPrefix.$innerCmd]);
+
+            case 'mysql':
+            case 'mariadb':
+                $passFlag = $password ? '-p'.escapeshellarg($password) : '';
+                $innerCmd = sprintf(self::KUBECTL_COMMANDS[$sourceType], escapeshellarg($user), $passFlag);
+
+                return array_merge($base, ['sh', '-c', $innerCmd]);
+
+            case 'mongodb':
+                $authArgs = $username
+                    ? '-u '.escapeshellarg($username).' -p '.escapeshellarg($password ?? '').' --authenticationDatabase admin'
+                    : '';
+                $innerCmd = "mongosh {$authArgs} --quiet --eval \"db.adminCommand('listDatabases').databases.forEach(d => print(d.name))\"";
+
+                return array_merge($base, ['sh', '-c', $innerCmd]);
+
+            default:
+                return null;
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────
@@ -132,7 +257,7 @@ class DatabaseInspector
         if (str_contains($msg, 'Connection refused')) {
             return 'Connection refused — check that the host and port are reachable from the Cellar container.';
         }
-        if (str_contains($msg, 'Connection timed out') || str_contains($msg, 'timeout')) {
+        if (str_contains($msg, 'Connection timed out') || str_contains($msg, 'timeout') || str_contains($msg, 'name resolution')) {
             return 'Connection timed out — the database may not be reachable from this network.';
         }
         if (str_contains($msg, 'Access denied') || str_contains($msg, 'authentication failed') || str_contains($msg, 'password authentication failed')) {

@@ -295,6 +295,7 @@ export const useRadarStore = defineStore("radar", () => {
 
   /**
    * List databases on a discovered endpoint.
+   * Uses kubectl exec fallback when pod info is provided.
    * Returns { databases: string[], error: string|null }
    */
   async function listDatabases(
@@ -303,15 +304,25 @@ export const useRadarStore = defineStore("radar", () => {
     port: number,
     username?: string,
     password?: string,
+    podName?: string,
+    podNamespace?: string,
   ): Promise<{ databases: string[]; error: string | null }> {
+    if (!activeClusterId.value) {
+      return { databases: [], error: "No cluster selected." };
+    }
     try {
-      const { data } = await api.post("/kubernetes/list-databases", {
-        source_type: sourceType,
-        host,
-        port,
-        username: username || undefined,
-        password: password || undefined,
-      });
+      const { data } = await api.post(
+        `/kubernetes/clusters/${activeClusterId.value}/list-databases`,
+        {
+          source_type: sourceType,
+          host,
+          port,
+          username: username || undefined,
+          password: password || undefined,
+          pod_name: podName || undefined,
+          namespace: podNamespace || undefined,
+        },
+      );
       return data;
     } catch {
       return { databases: [], error: "Failed to connect to database." };

@@ -342,10 +342,10 @@ class KubernetesController extends Controller
     /**
      * List databases on a discovered endpoint.
      *
-     * Connects to the target DB host and returns available database names
-     * so the user can pick which ones to back up.
+     * Uses kubectl exec into the pod to list databases when direct
+     * connection is not possible (e.g., cluster-local hosts).
      */
-    public function listDatabases(Request $request): JsonResponse
+    public function listDatabases(Request $request, RadarCluster $cluster): JsonResponse
     {
         $data = $request->validate([
             'source_type' => 'required|string|in:postgresql,mysql,mariadb,mongodb',
@@ -353,18 +353,41 @@ class KubernetesController extends Controller
             'port' => 'required|integer|min:1|max:65535',
             'username' => 'nullable|string|max:255',
             'password' => 'nullable|string|max:1000',
+            'pod_name' => 'nullable|string|max:255',
+            'namespace' => 'nullable|string|max:255',
         ]);
 
-        $inspector = new DatabaseInspector;
+        // Build kubectl context for exec fallback
+        $kubectlContext = null;
+        if (! empty($data['pod_name']) && ! empty($data['namespace'])) {
+            $tempKubeconfig = $cluster->kubeconfig ? $cluster->writeKubeconfigTempFile() : null;
+            $kubectlContext = [
+                'pod_name' => $data['pod_name'],
+                'namespace' => $data['namespace'],
+                'kubectl_path' => config('cellar.kubectl_path', '/usr/local/bin/kubectl'),
+                'kubeconfig' => $tempKubeconfig,
+                'context' => $cluster->context,
+            ];
+        }
 
-        $result = $inspector->listDatabases(
-            sourceType: $data['source_type'],
-            host: $data['host'],
-            port: $data['port'],
-            username: $data['username'] ?? null,
-            password: $data['password'] ?? null,
-        );
+        try {
+            $inspector = new DatabaseInspector;
 
-        return response()->json($result);
+            $result = $inspector->listDatabases(
+                sourceType: $data['source_type'],
+                host: $data['host'],
+                port: $data['port'],
+                username: $data['username'] ?? null,
+                password: $data['password'] ?? null,
+                kubectlContext: $kubectlContext,
+            );
+
+            return response()->json($result);
+        } finally {
+            // Cleanup temp kubeconfig
+            if (! empty($tempKubeconfig) && file_exists($tempKubeconfig)) {
+                unlink($tempKubeconfig);
+            }
+        }
     }
 }

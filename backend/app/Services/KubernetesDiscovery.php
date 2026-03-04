@@ -192,7 +192,13 @@ class KubernetesDiscovery
         );
 
         // 4. Discover credentials from Secrets
-        $secrets = $this->discoverSecrets($namespace);
+        // Build a set of known app names per namespace for name-based matching
+        $appNames = []; // keyed by "ns" => ["appName1", "appName2", ...]
+        foreach ($resources as $r) {
+            $ns = $r['namespace'];
+            $appNames[$ns][$r['name']] = true;
+        }
+        $secrets = $this->discoverSecrets($namespace, $appNames);
 
         // Group by composite key and merge Pod + Service into one entry
         $groups = [];
@@ -489,10 +495,14 @@ class KubernetesDiscovery
     /**
      * Discover database credentials from K8s Secrets.
      *
+     * Matching strategy (in order):
+     *  1. Label-based: secret has app.kubernetes.io/name or app label
+     *  2. Name-based: secret name starts with a discovered app name (e.g. "mysql-credentials" → "mysql")
+     *
      * Returns a map keyed by "namespace:appName" with arrays of
      * [{secret_name, key, value},...] for known credential keys.
      */
-    private function discoverSecrets(?string $namespace = null): array
+    private function discoverSecrets(?string $namespace = null, array $appNamesByNs = []): array
     {
         $args = ['get', 'secrets'];
         if ($namespace) {
@@ -528,9 +538,20 @@ class KubernetesDiscovery
             }
 
             // Determine which app this secret belongs to
+            // Strategy 1: Label-based
             $appName = $labels['app.kubernetes.io/name']
                 ?? $labels['app']
                 ?? null;
+
+            // Strategy 2: Name-based — match secret name against discovered app names
+            if (! $appName && isset($appNamesByNs[$ns])) {
+                foreach ($appNamesByNs[$ns] as $candidate => $_) {
+                    if (str_starts_with($secretName, $candidate.'-') || $secretName === $candidate) {
+                        $appName = $candidate;
+                        break;
+                    }
+                }
+            }
 
             if (! $appName) {
                 continue; // Can't associate with a discovered resource
