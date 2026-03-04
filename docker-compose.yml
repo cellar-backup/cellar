@@ -1,0 +1,115 @@
+# =============================================================================
+# Cellar — Docker Compose
+# Default deployment for HomeLab operators
+#
+# Stack: PHP 8.3 (Laravel) + Redis + Horizon + Caddy
+# Database: SQLite by default (zero-config).
+# =============================================================================
+
+services:
+  # ---------- Redis ----------
+  cellar-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - cellar-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------- API ----------
+  cellar-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      cellar-redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: ${CELLAR_DEBUG:-false}
+      APP_URL: ${APP_URL:-http://localhost:8420}
+      DB_DATABASE: /app/data/cellar.sqlite
+      REDIS_HOST: cellar-redis
+      QUEUE_CONNECTION: redis
+      CACHE_STORE: redis
+      SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:-localhost:8420,localhost}
+    volumes:
+      - cellar-data:/app/data
+      - cellar-repos:/data/repositories
+      - cellar-logs:/var/log/cellar
+
+  # ---------- Worker (Horizon) ----------
+  cellar-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    command: php artisan horizon
+    depends_on:
+      cellar-api:
+        condition: service_started
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: ${CELLAR_DEBUG:-false}
+      DB_DATABASE: /app/data/cellar.sqlite
+      REDIS_HOST: cellar-redis
+      QUEUE_CONNECTION: redis
+      CACHE_STORE: redis
+    volumes:
+      - cellar-data:/app/data
+      - cellar-repos:/data/repositories
+      - cellar-logs:/var/log/cellar
+
+  # ---------- Scheduler ----------
+  cellar-scheduler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    command: php artisan schedule:work
+    depends_on:
+      cellar-api:
+        condition: service_started
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: ${CELLAR_DEBUG:-false}
+      DB_DATABASE: /app/data/cellar.sqlite
+      REDIS_HOST: cellar-redis
+      QUEUE_CONNECTION: redis
+      CACHE_STORE: redis
+    volumes:
+      - cellar-data:/app/data
+
+  # ---------- Frontend ----------
+  cellar-ui:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ui
+    restart: unless-stopped
+    depends_on:
+      - cellar-api
+
+  # ---------- Reverse Proxy ----------
+  cellar-proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${CELLAR_PORT:-8420}:8420"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - cellar-caddy-data:/data
+    depends_on:
+      - cellar-ui
+      - cellar-api
+
+volumes:
+  cellar-data:
+  cellar-repos:
+  cellar-redis-data:
+  cellar-logs:
+  cellar-caddy-data:
