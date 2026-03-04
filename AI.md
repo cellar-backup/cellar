@@ -578,16 +578,19 @@ Key features:
 Lists available databases on discovered endpoints using a **dual strategy**. Used by Radar's import review to let users pick which databases to back up.
 
 **Strategy 1 — Direct PDO** (tried first when host is externally reachable, skipped for `.svc.cluster.local` hosts):
+
 - **PostgreSQL** — PDO `pgsql`, queries `pg_database`
 - **MySQL / MariaDB** — PDO `mysql`, `SHOW DATABASES`
 
 **Strategy 2 — kubectl exec fallback** (used when Cellar runs outside the K8s cluster, e.g., Docker on host):
+
 - Runs DB CLI inside the discovered pod via `kubectl exec <pod> -n <namespace> -- sh -c "<query_cmd>"`
 - `KUBECTL_COMMANDS` constant defines per-engine commands: `psql -U %s -d postgres -t -A -c "SELECT datname..."` for PostgreSQL, `mysql -u %s %s -N -e "SHOW DATABASES"` for MySQL/MariaDB
 - `buildKubectlExecCommand()` constructs the full command array including kubeconfig and context from `$kubectlContext`
 - Uses Laravel `Process::timeout(15)->run()` for execution
 
 **Common:**
+
 - **MongoDB** — `mongosh` CLI, `listDatabases` admin command
 - **Redis** — not supported (no concept of named databases)
 - Returns `{databases: string[], error: string|null}` with friendly error messages

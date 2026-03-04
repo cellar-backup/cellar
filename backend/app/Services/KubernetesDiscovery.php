@@ -201,9 +201,11 @@ class KubernetesDiscovery
         $secrets = $this->discoverSecrets($namespace, $appNames);
 
         // Group by composite key and merge Pod + Service into one entry
+        // Normalize mysql/mariadb to same group key (they share port 3306)
         $groups = [];
         foreach ($resources as $r) {
-            $key = "{$r['namespace']}:{$r['name']}:{$r['source_type']}";
+            $groupType = in_array($r['source_type'], ['mysql', 'mariadb']) ? 'mysql_compat' : $r['source_type'];
+            $key = "{$r['namespace']}:{$r['name']}:{$groupType}";
 
             $endpoint = [
                 'kind' => $r['kind'],
@@ -247,6 +249,13 @@ class KubernetesDiscovery
                 // Keep image from whichever has it (usually Pod)
                 if (empty($groups[$key]['image']) && ! empty($r['image'])) {
                     $groups[$key]['image'] = $r['image'];
+                }
+
+                // Prefer more specific source_type (mariadb > mysql)
+                if ($r['source_type'] === 'mariadb' && $groups[$key]['source_type'] === 'mysql') {
+                    $groups[$key]['source_type'] = 'mariadb';
+                } elseif ($groups[$key]['source_type'] === 'mariadb' && $r['source_type'] === 'mysql') {
+                    // keep mariadb
                 }
 
                 // Merge labels
@@ -366,63 +375,81 @@ class KubernetesDiscovery
                 $port = $portSpec['port'] ?? 0;
                 $nodePort = $portSpec['nodePort'] ?? null;
 
-                if (isset(self::PORT_MAP[$port])) {
-                    $sourceType = self::PORT_MAP[$port];
+                // Determine source type: first by well-known port, then by name/label heuristic
+                $sourceType = self::PORT_MAP[$port] ?? null;
 
-                    // Determine the best host/port for external access
-                    $internalHost = "{$svcName}.{$ns}.svc.cluster.local";
-                    $externalHost = null;
-                    $externalPort = null;
+                if (! $sourceType) {
+                    // Try to infer from canonical name or service name (handles non-standard ports)
+                    $sourceType = $this->detectSourceTypeFromName($canonicalName)
+                        ?? $this->detectSourceTypeFromName($svcName);
+                }
 
-                    if ($svcType === 'ExternalName') {
-                        $externalHost = $svc['spec']['externalName'] ?? null;
-                        $externalPort = $port;
-                    } elseif ($svcType === 'LoadBalancer') {
-                        // Check for external IP from status
-                        $ingress = $svc['status']['loadBalancer']['ingress'] ?? [];
-                        if (! empty($ingress)) {
-                            $externalHost = $ingress[0]['ip'] ?? $ingress[0]['hostname'] ?? null;
-                            $externalPort = $port;
-                        }
-                        // Fallback to spec.externalIPs
-                        if (! $externalHost) {
-                            $extIPs = $svc['spec']['externalIPs'] ?? [];
-                            if (! empty($extIPs)) {
-                                $externalHost = $extIPs[0];
-                                $externalPort = $port;
-                            }
-                        }
-                    } elseif ($svcType === 'NodePort' && $nodePort) {
-                        $externalPort = $nodePort;
-                        // Node IP needs to come from cluster nodes — use placeholder
-                        $externalHost = null;
+                if (! $sourceType) {
+                    continue; // Not a recognized database service
+                }
+
+                // Refine mysql → mariadb if the service name or labels hint at MariaDB
+                if ($sourceType === 'mysql') {
+                    $nameHint = strtolower($canonicalName . ' ' . $svcName);
+                    $labelHint = strtolower(implode(' ', array_values($labels)));
+                    if (str_contains($nameHint, 'mariadb') || str_contains($labelHint, 'mariadb')) {
+                        $sourceType = 'mariadb';
                     }
+                }
 
-                    // Also check spec.externalIPs (available on any service type)
+                // Determine the best host/port for external access
+                $internalHost = "{$svcName}.{$ns}.svc.cluster.local";
+                $externalHost = null;
+                $externalPort = null;
+
+                if ($svcType === 'ExternalName') {
+                    $externalHost = $svc['spec']['externalName'] ?? null;
+                    $externalPort = $port;
+                } elseif ($svcType === 'LoadBalancer') {
+                    // Check for external IP from status
+                    $ingress = $svc['status']['loadBalancer']['ingress'] ?? [];
+                    if (! empty($ingress)) {
+                        $externalHost = $ingress[0]['ip'] ?? $ingress[0]['hostname'] ?? null;
+                        $externalPort = $port;
+                    }
+                    // Fallback to spec.externalIPs
                     if (! $externalHost) {
                         $extIPs = $svc['spec']['externalIPs'] ?? [];
                         if (! empty($extIPs)) {
                             $externalHost = $extIPs[0];
-                            $externalPort = $externalPort ?? $port;
+                            $externalPort = $port;
                         }
                     }
-
-                    $found[] = [
-                        'kind' => 'Service',
-                        'namespace' => $ns,
-                        'name' => $canonicalName,
-                        'resource_name' => $svcName,
-                        'source_type' => $sourceType,
-                        'image' => null,
-                        'host' => $internalHost,
-                        'port' => $port,
-                        'external_host' => $externalHost,
-                        'external_port' => $externalPort ?? ($nodePort ?? $port),
-                        'node_port' => $nodePort,
-                        'service_type' => $svcType,
-                        'labels' => $labels,
-                    ];
+                } elseif ($svcType === 'NodePort' && $nodePort) {
+                    $externalPort = $nodePort;
+                    // Node IP needs to come from cluster nodes — use placeholder
+                    $externalHost = null;
                 }
+
+                // Also check spec.externalIPs (available on any service type)
+                if (! $externalHost) {
+                    $extIPs = $svc['spec']['externalIPs'] ?? [];
+                    if (! empty($extIPs)) {
+                        $externalHost = $extIPs[0];
+                        $externalPort = $externalPort ?? $port;
+                    }
+                }
+
+                $found[] = [
+                    'kind' => 'Service',
+                    'namespace' => $ns,
+                    'name' => $canonicalName,
+                    'resource_name' => $svcName,
+                    'source_type' => $sourceType,
+                    'image' => null,
+                    'host' => $internalHost,
+                    'port' => $port,
+                    'external_host' => $externalHost,
+                    'external_port' => $externalPort ?? ($nodePort ?? $port),
+                    'node_port' => $nodePort,
+                    'service_type' => $svcType,
+                    'labels' => $labels,
+                ];
             }
         }
 
@@ -586,6 +613,23 @@ class KubernetesDiscovery
 
         foreach (self::IMAGE_MAP as $prefix => $sourceType) {
             if (str_contains($imageLower, $prefix)) {
+                return $sourceType;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Detect source type from a K8s resource name (service/canonical name).
+     * Handles non-standard ports by matching name against IMAGE_MAP prefixes.
+     */
+    private function detectSourceTypeFromName(string $name): ?string
+    {
+        $nameLower = strtolower($name);
+
+        foreach (self::IMAGE_MAP as $prefix => $sourceType) {
+            if (str_starts_with($nameLower, $prefix) || str_contains($nameLower, "-{$prefix}") || str_contains($nameLower, "{$prefix}-")) {
                 return $sourceType;
             }
         }

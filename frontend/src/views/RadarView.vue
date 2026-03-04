@@ -59,7 +59,7 @@ const importReviewItems = ref<
     port: number | null;
     username: string;
     password: string;
-    database_name: string;
+    database_names: string[];
     detectedDatabases: string[] | null;
     dbDetectLoading: boolean;
     dbDetectError: string | null;
@@ -236,7 +236,7 @@ async function importSelected() {
       port: bestPort(r),
       username: usernameCred?.value ?? "",
       password: passwordCred?.value ?? "",
-      database_name: dbNameCred?.value ?? "",
+      database_names: dbNameCred?.value ? [dbNameCred.value] : [],
       detectedDatabases: null,
       dbDetectLoading: false,
       dbDetectError: null,
@@ -276,9 +276,9 @@ async function detectDatabases(item: (typeof importReviewItems.value)[0]) {
     item.detectedDatabases = [];
   } else {
     item.detectedDatabases = result.databases;
-    // Auto-select first if database_name is empty
-    if (!item.database_name && result.databases.length > 0) {
-      item.database_name = result.databases[0];
+    // Auto-select all detected databases (user can deselect)
+    if (item.database_names.length === 0 && result.databases.length > 0) {
+      item.database_names = [...result.databases];
     }
   }
 }
@@ -318,15 +318,25 @@ async function confirmImport() {
   importMessage.value = null;
   showImportReview.value = false;
 
-  const resources = importReviewItems.value.map((item) => item.resource);
-  const overrides: ImportOverride[] = importReviewItems.value.map((item) => ({
-    resource_key: item.resource.resource_key,
-    host: item.host,
-    port: item.port,
-    username: item.username || undefined,
-    password: item.password || undefined,
-    database_name: item.database_name || undefined,
-  }));
+  // Expand items with multiple databases into separate entries (one Source per DB)
+  const resources: DiscoveredResource[] = [];
+  const overrides: ImportOverride[] = [];
+
+  for (const item of importReviewItems.value) {
+    const dbNames =
+      item.database_names.length > 0 ? item.database_names : [""];
+    for (const dbName of dbNames) {
+      resources.push(item.resource);
+      overrides.push({
+        resource_key: item.resource.resource_key,
+        host: item.host,
+        port: item.port,
+        username: item.username || undefined,
+        password: item.password || undefined,
+        database_name: dbName || undefined,
+      });
+    }
+  }
 
   try {
     const result = await store.importResources(resources, overrides);
@@ -886,26 +896,57 @@ onMounted(() => {
                 </button>
               </div>
 
-              <!-- Detected databases list -->
+              <!-- Detected databases list (multi-select) -->
               <div
                 v-if="
                   item.detectedDatabases && item.detectedDatabases.length > 0
                 "
-                class="flex flex-wrap gap-1.5 mb-1.5"
+                class="mb-1.5"
               >
-                <button
-                  v-for="db in item.detectedDatabases"
-                  :key="db"
-                  class="rounded-lg border px-2.5 py-1 text-xs font-mono font-medium transition-colors"
-                  :class="
-                    item.database_name === db
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border text-text-muted hover:border-primary/30'
-                  "
-                  @click="item.database_name = db"
-                >
-                  {{ db }}
-                </button>
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-[11px] text-text-muted">
+                    {{ item.database_names.length }} of
+                    {{ item.detectedDatabases.length }} selected
+                  </span>
+                  <button
+                    class="text-[11px] text-primary hover:underline"
+                    @click="
+                      item.database_names =
+                        item.database_names.length ===
+                        item.detectedDatabases.length
+                          ? []
+                          : [...item.detectedDatabases]
+                    "
+                  >
+                    {{
+                      item.database_names.length ===
+                      item.detectedDatabases.length
+                        ? "Deselect all"
+                        : "Select all"
+                    }}
+                  </button>
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                  <button
+                    v-for="db in item.detectedDatabases"
+                    :key="db"
+                    class="rounded-lg border px-2.5 py-1 text-xs font-mono font-medium transition-colors"
+                    :class="
+                      item.database_names.includes(db)
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-text-muted hover:border-primary/30'
+                    "
+                    @click="
+                      item.database_names.includes(db)
+                        ? (item.database_names = item.database_names.filter(
+                            (d) => d !== db,
+                          ))
+                        : item.database_names.push(db)
+                    "
+                  >
+                    {{ db }}
+                  </button>
+                </div>
               </div>
 
               <!-- Detection error -->
@@ -915,10 +956,19 @@ onMounted(() => {
 
               <!-- Manual input (always available as fallback) -->
               <input
-                v-model="item.database_name"
+                :value="item.database_names.join(', ')"
                 type="text"
-                placeholder="Database name (or detect above)"
+                placeholder="Database name(s) — comma separated, or detect above"
                 class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                @change="
+                  (e: Event) => {
+                    const val = (e.target as HTMLInputElement).value;
+                    item.database_names = val
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                  }
+                "
               />
             </div>
 

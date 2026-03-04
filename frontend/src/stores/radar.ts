@@ -231,12 +231,9 @@ export const useRadarStore = defineStore("radar", () => {
   ): Promise<{ message: string; count: number }> {
     if (!activeClusterId.value) throw new Error("No cluster selected.");
 
-    const overrideMap = new Map(
-      (overrides ?? []).map((o) => [o.resource_key, o]),
-    );
-
-    const payload = selected.map((r) => {
-      const ov = overrideMap.get(r.resource_key);
+    // Build payload — resources and overrides are parallel arrays (1:1 by index)
+    const payload = selected.map((r, i) => {
+      const ov = overrides?.[i];
       return {
         source_type: r.source_type,
         name: r.name,

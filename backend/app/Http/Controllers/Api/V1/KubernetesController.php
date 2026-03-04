@@ -266,9 +266,14 @@ class KubernetesController extends Controller
         $created = [];
 
         foreach ($data['resources'] as $r) {
+            $dbName = $r['database_name'] ?? null;
+            $sourceName = $dbName
+                ? "{$r['name']} — {$dbName} ({$r['namespace']})"
+                : "{$r['name']} ({$r['namespace']})";
+
             $source = Source::create([
                 'source_type' => $r['source_type'],
-                'name' => "{$r['name']} ({$r['namespace']})",
+                'name' => $sourceName,
                 'host' => $r['host'] ?? null,
                 'port' => $r['port'] ?? null,
                 'username' => $r['username'] ?? null,
