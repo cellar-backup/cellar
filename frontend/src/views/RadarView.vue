@@ -408,7 +408,6 @@ onMounted(() => {
                 }}
                 <input
                   type="file"
-                  accept=".yaml,.yml,.conf,*"
                   class="hidden"
                   @change="onKubeconfigSelected"
                 />
