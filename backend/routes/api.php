@@ -74,13 +74,20 @@ Route::prefix('v1')->group(function () {
 
         // Kubernetes Radar
         Route::prefix('kubernetes')->group(function () {
-            Route::post('test', [KubernetesController::class, 'test']);
-            Route::post('discover', [KubernetesController::class, 'discover']);
-            Route::get('namespaces', [KubernetesController::class, 'namespaces']);
-            Route::post('import', [KubernetesController::class, 'import']);
-            Route::post('ignore', [KubernetesController::class, 'ignore']);
-            Route::get('ignored', [KubernetesController::class, 'ignored']);
-            Route::delete('ignored/{radarIgnore}', [KubernetesController::class, 'unignore']);
+            // Cluster management
+            Route::get('clusters', [KubernetesController::class, 'clusters']);
+            Route::post('clusters', [KubernetesController::class, 'storeCluster']);
+            Route::put('clusters/{cluster}', [KubernetesController::class, 'updateCluster']);
+            Route::delete('clusters/{cluster}', [KubernetesController::class, 'destroyCluster']);
+
+            // Cluster-scoped operations
+            Route::post('clusters/{cluster}/test', [KubernetesController::class, 'test']);
+            Route::post('clusters/{cluster}/discover', [KubernetesController::class, 'discover']);
+            Route::get('clusters/{cluster}/namespaces', [KubernetesController::class, 'namespaces']);
+            Route::post('clusters/{cluster}/import', [KubernetesController::class, 'import']);
+            Route::post('clusters/{cluster}/ignore', [KubernetesController::class, 'ignore']);
+            Route::get('clusters/{cluster}/ignored', [KubernetesController::class, 'ignored']);
+            Route::delete('clusters/{cluster}/ignored/{radarIgnore}', [KubernetesController::class, 'unignore']);
         });
     });
 });

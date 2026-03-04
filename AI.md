@@ -66,7 +66,7 @@ cellar/
 │   │   │   │   └── Api/V1/  # 10 controllers
 │   │   │   └── Requests/
 │   │   ├── Jobs/         # 4 queue jobs
-│   │   ├── Models/       # 9 Eloquent models
+│   │   ├── Models/       # 10 Eloquent models
 │   │   ├── Observers/
 │   │   ├── Providers/
 │   │   └── Services/
@@ -78,7 +78,7 @@ cellar/
 │   │           └── BorgEngine.php    (implementation)
 │   ├── config/
 │   │   └── cellar.php    # Cellar-specific config
-│   ├── database/migrations/  # 12 migration files
+│   ├── database/migrations/  # 13 migration files
 │   └── routes/
 │       ├── api.php       # API routes (v1, Sanctum auth)
 │       └── console.php   # Scheduler definitions
@@ -337,38 +337,42 @@ All routes prefixed with `/api/v1`. Auth uses Laravel Sanctum tokens.
 
 ### Authenticated (Sanctum)
 
-| Method | Path                           | Controller/Action                    |
-| ------ | ------------------------------ | ------------------------------------ |
-| POST   | `auth/logout`                  | `AuthController@logout`              |
-| GET    | `auth/me`                      | `AuthController@me`                  |
-| CRUD   | `repositories`                 | `RepositoryController` (apiResource) |
-| POST   | `repositories/{id}/test`       | `RepositoryController@test`          |
-| POST   | `repositories/{id}/import`     | `RepositoryController@import`        |
-| CRUD   | `sources`                      | `SourceController` (apiResource)     |
-| POST   | `sources/quick-add`            | `SourceController@quickAdd`          |
-| POST   | `sources/{id}/test-connection` | `SourceController@testConnection`    |
-| CRUD   | `plans`                        | `BackupPlanController` (apiResource) |
-| POST   | `plans/{id}/backup`            | `BackupPlanController@backup`        |
-| POST   | `plans/{id}/restore`           | `BackupPlanController@restore`       |
-| POST   | `plans/{id}/prune`             | `BackupPlanController@prune`         |
-| POST   | `plans/{id}/verify`            | `BackupPlanController@verify`        |
-| GET    | `jobs`                         | `JobController@index`                |
-| GET    | `jobs/{id}`                    | `JobController@show`                 |
-| GET    | `archives`                     | `ArchiveController@index`            |
-| GET    | `archives/{id}`                | `ArchiveController@show`             |
-| DELETE | `archives/{id}`                | `ArchiveController@destroy`          |
-| POST   | `archives/{id}/restore`        | `ArchiveController@restore`          |
-| GET    | `archives/{id}/download`       | `ArchiveController@download`         |
-| CRUD   | `notifications`                | `NotificationChannelController`      |
-| CRUD   | `documents`                    | `DocumentController`                 |
-| POST   | `documents/{id}/test`          | `DocumentController@test`            |
-| POST   | `kubernetes/test`              | `KubernetesController@test`          |
-| POST   | `kubernetes/discover`          | `KubernetesController@discover`      |
-| GET    | `kubernetes/namespaces`        | `KubernetesController@namespaces`    |
-| POST   | `kubernetes/import`            | `KubernetesController@import`        |
-| POST   | `kubernetes/ignore`            | `KubernetesController@ignore`        |
-| GET    | `kubernetes/ignored`           | `KubernetesController@ignored`       |
-| DELETE | `kubernetes/ignored/{id}`      | `KubernetesController@unignore`      |
+| Method | Path                                          | Controller/Action                     |
+| ------ | --------------------------------------------- | ------------------------------------- |
+| POST   | `auth/logout`                                 | `AuthController@logout`               |
+| GET    | `auth/me`                                     | `AuthController@me`                   |
+| CRUD   | `repositories`                                | `RepositoryController` (apiResource)  |
+| POST   | `repositories/{id}/test`                      | `RepositoryController@test`           |
+| POST   | `repositories/{id}/import`                    | `RepositoryController@import`         |
+| CRUD   | `sources`                                     | `SourceController` (apiResource)      |
+| POST   | `sources/quick-add`                           | `SourceController@quickAdd`           |
+| POST   | `sources/{id}/test-connection`                | `SourceController@testConnection`     |
+| CRUD   | `plans`                                       | `BackupPlanController` (apiResource)  |
+| POST   | `plans/{id}/backup`                           | `BackupPlanController@backup`         |
+| POST   | `plans/{id}/restore`                          | `BackupPlanController@restore`        |
+| POST   | `plans/{id}/prune`                            | `BackupPlanController@prune`          |
+| POST   | `plans/{id}/verify`                           | `BackupPlanController@verify`         |
+| GET    | `jobs`                                        | `JobController@index`                 |
+| GET    | `jobs/{id}`                                   | `JobController@show`                  |
+| GET    | `archives`                                    | `ArchiveController@index`             |
+| GET    | `archives/{id}`                               | `ArchiveController@show`              |
+| DELETE | `archives/{id}`                               | `ArchiveController@destroy`           |
+| POST   | `archives/{id}/restore`                       | `ArchiveController@restore`           |
+| GET    | `archives/{id}/download`                      | `ArchiveController@download`          |
+| CRUD   | `notifications`                               | `NotificationChannelController`       |
+| CRUD   | `documents`                                   | `DocumentController`                  |
+| POST   | `documents/{id}/test`                         | `DocumentController@test`             |
+| GET    | `kubernetes/clusters`                         | `KubernetesController@clusters`       |
+| POST   | `kubernetes/clusters`                         | `KubernetesController@storeCluster`   |
+| PUT    | `kubernetes/clusters/{id}`                    | `KubernetesController@updateCluster`  |
+| DELETE | `kubernetes/clusters/{id}`                    | `KubernetesController@destroyCluster` |
+| POST   | `kubernetes/clusters/{id}/test`               | `KubernetesController@test`           |
+| POST   | `kubernetes/clusters/{id}/discover`           | `KubernetesController@discover`       |
+| GET    | `kubernetes/clusters/{id}/namespaces`         | `KubernetesController@namespaces`     |
+| POST   | `kubernetes/clusters/{id}/import`             | `KubernetesController@import`         |
+| POST   | `kubernetes/clusters/{id}/ignore`             | `KubernetesController@ignore`         |
+| GET    | `kubernetes/clusters/{id}/ignored`            | `KubernetesController@ignored`        |
+| DELETE | `kubernetes/clusters/{id}/ignored/{ignoreId}` | `KubernetesController@unignore`       |
 
 ---
 
@@ -565,6 +569,7 @@ Key features:
 - **PVC scanning** — lists bound PersistentVolumeClaims as potential directory backup targets
 - **Deduplication** — composite key `namespace:name:source_type` prevents duplicate entries
 - Returns discovered resources with host (`.svc.cluster.local`), port, namespace, kind, image info
+- Factory method: `fromCluster(RadarCluster)` — creates instance from a saved cluster, writing kubeconfig content to a temp file (cleaned up in `__destruct`)
 
 ---
 
@@ -621,12 +626,21 @@ Key features:
 
 ### `KubernetesController`
 
-- `test` — Cluster connectivity check via `KubernetesDiscovery::testConnection()`.
-- `discover` — Runs full discovery (pods, services, PVCs), filters out ignored resources, annotates `already_added` for existing sources.
-- `namespaces` — Lists available namespaces.
+**Cluster CRUD:**
+
+- `clusters` — List all saved cluster configurations.
+- `storeCluster` — Create a new cluster; accepts kubeconfig file upload (multipart/form-data, max 512KB, encrypted at rest).
+- `updateCluster` — Update cluster name, context, namespace, or replace/clear kubeconfig.
+- `destroyCluster` — Delete a cluster and its associated ignore list.
+
+**Cluster-scoped discovery (all routes prefixed with `clusters/{cluster}`):**
+
+- `test` — Cluster connectivity check via `KubernetesDiscovery::fromCluster()`.
+- `discover` — Runs full discovery scoped to a cluster, filters out ignored resources, annotates `already_added`, updates `last_scanned_at`.
+- `namespaces` — Lists available namespaces in the cluster.
 - `import` — Batch-creates Source records from selected discovered resources.
-- `ignore` — Persists a resource to `RadarIgnore` so it no longer appears in discovery.
-- `ignored` — Lists all ignored resources.
+- `ignore` — Persists a resource to `RadarIgnore` (scoped to cluster) so it no longer appears in discovery.
+- `ignored` — Lists ignored resources for a cluster.
 - `unignore` — Removes a resource from the ignore list.
 
 ---
@@ -647,6 +661,7 @@ Key features:
 10. `2024_01_01_000015_create_notification_channels_table.php`
 11. `2024_01_01_000016_create_custom_documents_table.php`
 12. `2024_01_01_000017_create_radar_ignores_table.php` — K8s Radar ignore list (resource_key unique, namespace, name, kind, source_type, reason)
+13. `2024_01_01_000018_create_radar_clusters_table.php` — K8s cluster configs (name, kubeconfig encrypted, context, default_namespace, is_active, last_scanned_at) + adds cluster_id FK to radar_ignores
 
 ---
 
@@ -696,7 +711,7 @@ Auth guard: on first load validates token via `GET /auth/me`; subsequent navigat
 
 **`sources.ts`** — Manages Source[]. Methods: `fetchSources()`, `quickAdd(payload)`, `getSource(id)`, `updateSource(id, payload)`, `testConnection(id)`, `deleteSource(id)`.
 
-**`radar.ts`** — Manages K8s Radar state. Tracks discovered resources, ignored list, connection status. Methods: `testConnection()`, `discover()`, `importResources(selected)`, `ignoreResource(resource, reason?)`, `fetchIgnored()`, `unignore(id)`.
+**`radar.ts`** — Manages multi-cluster K8s Radar state. Tracks saved clusters, active cluster selection, discovered resources, ignored list. Cluster CRUD: `fetchClusters()`, `createCluster(name, kubeconfigFile?, context?, defaultNamespace?)`, `updateCluster(...)`, `deleteCluster(id)`, `selectCluster(id)`. Discovery (cluster-scoped): `testConnection()`, `discover()`, `importResources(selected)`, `ignoreResource(resource, reason?)`, `fetchIgnored()`, `unignore(id)`. Uses `FormData` with multipart upload for kubeconfig files.
 
 ### Views (9 files)
 
@@ -706,7 +721,7 @@ Auth guard: on first load validates token via `GET /auth/me`; subsequent navigat
 
 - **SourcesView** — Wizard supports two categories: Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis) and Filesystem (Directory, Docker Volume). Step 2 form fields adapt based on category.
 - **PlansView** — Includes "Import Borg Repo" modal for importing existing Borg repositories into Cellar.
-- **RadarView** — K8s cluster discovery UI: connection config (kubeconfig path, context, namespace), scan results as selectable list, bulk import, per-resource ignore with "Ignored" panel toggle.
+- **RadarView** — Multi-cluster K8s discovery UI: cluster selector bar with add/edit/delete, kubeconfig file upload modal, per-cluster scan with namespace filter, scan results as selectable list, bulk import, per-resource ignore with "Ignored" panel toggle.
 
 ---
 
@@ -793,5 +808,5 @@ clean       # remove node_modules + dist + vendor
 9. **Auto-pruning** — Prune runs 30 minutes after each scheduled backup.
 10. **Caddy reverse proxy** — Handles routing between SPA and API, with admin-off for minimal footprint.
 11. **Borg repo import** — Importing creates an anchor Source (type=directory) + BackupPlan (schedule_enabled=false) to satisfy FK constraints, then creates Archive records for each discovered archive. Stored `imported_paths` mapping in repo config for traceability.
-12. **Kubernetes Radar** — Uses kubectl CLI (not client-go) via Laravel Process facade for simplicity. Supports both in-cluster ServiceAccount and out-of-cluster kubeconfig. Ignore list persisted in `radar_ignores` table to prevent rediscovery noise.
+12. **Kubernetes Radar** — Uses kubectl CLI (not client-go) via Laravel Process facade for simplicity. Supports multiple saved cluster configurations with kubeconfig file upload (encrypted at rest via Laravel's `encrypted` cast) or in-cluster ServiceAccount auto-detect. Ignore list persisted in `radar_ignores` table (scoped per cluster) to prevent rediscovery noise. Temp kubeconfig files written on-demand and cleaned up in `__destruct`.
 13. **Non-database sources** — Frontend wizard split into Database/Filesystem categories. Backend `testConnection()` validates filesystem paths instead of rejecting non-DB types.

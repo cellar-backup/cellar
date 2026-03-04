@@ -47,6 +47,8 @@ class KubernetesDiscovery
 
     private ?string $context;
 
+    private ?string $tempKubeconfigPath = null;
+
     public function __construct(
         ?string $kubectlPath = null,
         ?string $kubeconfig = null,
@@ -55,6 +57,32 @@ class KubernetesDiscovery
         $this->kubectlPath = $kubectlPath ?? config('cellar.kubectl_path', '/usr/local/bin/kubectl');
         $this->kubeconfig = $kubeconfig;
         $this->context = $context;
+    }
+
+    /**
+     * Create an instance from a RadarCluster model.
+     * Writes kubeconfig content to a temp file if present.
+     */
+    public static function fromCluster(\App\Models\RadarCluster $cluster): self
+    {
+        $instance = new self(
+            context: $cluster->context,
+        );
+
+        if ($cluster->kubeconfig) {
+            $instance->tempKubeconfigPath = $cluster->writeKubeconfigTempFile();
+            $instance->kubeconfig = $instance->tempKubeconfigPath;
+        }
+
+        return $instance;
+    }
+
+    public function __destruct()
+    {
+        // Cleanup temp kubeconfig file
+        if ($this->tempKubeconfigPath && file_exists($this->tempKubeconfigPath)) {
+            unlink($this->tempKubeconfigPath);
+        }
     }
 
     // ── Shell helpers ──────────────────────────────────────────
