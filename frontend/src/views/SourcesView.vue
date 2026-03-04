@@ -3,6 +3,8 @@ import { ref, computed } from "vue";
 import {
   Database,
   Server,
+  FolderOpen,
+  Container,
   CircleCheck,
   CircleX,
   Loader2,
@@ -13,12 +15,24 @@ import {
 import { useSourcesStore, type QuickAddPayload } from "@/stores/sources";
 
 const DB_TYPES = [
-  { value: "postgresql", label: "PostgreSQL", defaultPort: 5432 },
-  { value: "mysql", label: "MySQL", defaultPort: 3306 },
-  { value: "mariadb", label: "MariaDB", defaultPort: 3306 },
-  { value: "mongodb", label: "MongoDB", defaultPort: 27017 },
-  { value: "redis", label: "Redis", defaultPort: 6379 },
+  { value: "postgresql", label: "PostgreSQL", defaultPort: 5432, isDb: true },
+  { value: "mysql", label: "MySQL", defaultPort: 3306, isDb: true },
+  { value: "mariadb", label: "MariaDB", defaultPort: 3306, isDb: true },
+  { value: "mongodb", label: "MongoDB", defaultPort: 27017, isDb: true },
+  { value: "redis", label: "Redis", defaultPort: 6379, isDb: true },
 ] as const;
+
+const FS_TYPES = [
+  { value: "directory", label: "Directory", defaultPort: null, isDb: false },
+  {
+    value: "docker_volume",
+    label: "Docker Volume",
+    defaultPort: null,
+    isDb: false,
+  },
+] as const;
+
+const ALL_TYPES = [...DB_TYPES, ...FS_TYPES];
 
 const store = useSourcesStore();
 store.fetchSources();
@@ -37,11 +51,14 @@ const form = ref<QuickAddPayload>({
   username: "",
   password: "",
   database_name: "",
+  path: "",
 });
 
 const selectedType = computed(
-  () => DB_TYPES.find((t) => t.value === form.value.source_type) ?? null,
+  () => ALL_TYPES.find((t) => t.value === form.value.source_type) ?? null,
 );
+
+const wizardIsDatabase = computed(() => selectedType.value?.isDb ?? true);
 
 function openWizard() {
   showWizard.value = true;
@@ -55,10 +72,11 @@ function openWizard() {
     username: "",
     password: "",
     database_name: "",
+    path: "",
   };
 }
 
-function selectType(type: string, defaultPort: number) {
+function selectType(type: string, defaultPort: number | null) {
   form.value.source_type = type;
   form.value.port = defaultPort;
   wizardStep.value = "details";
@@ -127,7 +145,9 @@ async function deleteSource(id: string, name: string) {
 }
 
 function sourceIcon(type: string) {
-  return type === "directory" || type === "docker_volume" ? Server : Database;
+  if (type === "directory") return FolderOpen;
+  if (type === "docker_volume") return Container;
+  return Database;
 }
 
 // ---- Edit modal state ----
@@ -629,10 +649,15 @@ async function editDeleteSource() {
               What do you want to back up?
             </h2>
             <p class="mt-1 text-sm text-text-muted">
-              Select your database type to get started.
+              Select the source type to get started.
             </p>
 
-            <div class="mt-5 grid grid-cols-2 gap-3">
+            <h3
+              class="mt-5 mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted"
+            >
+              Databases
+            </h3>
+            <div class="grid grid-cols-2 gap-3">
               <button
                 v-for="db in DB_TYPES"
                 :key="db.value"
@@ -642,6 +667,28 @@ async function editDeleteSource() {
                 <Database class="h-6 w-6 text-primary" />
                 <span class="text-sm font-medium text-text-primary">
                   {{ db.label }}
+                </span>
+              </button>
+            </div>
+
+            <h3
+              class="mt-5 mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted"
+            >
+              Filesystem
+            </h3>
+            <div class="grid grid-cols-2 gap-3">
+              <button
+                v-for="fs in FS_TYPES"
+                :key="fs.value"
+                class="flex items-center gap-3 rounded-xl border border-border bg-surface-raised p-4 text-left hover:border-primary/50 transition-colors"
+                @click="selectType(fs.value, fs.defaultPort)"
+              >
+                <component
+                  :is="sourceIcon(fs.value)"
+                  class="h-6 w-6 text-primary"
+                />
+                <span class="text-sm font-medium text-text-primary">
+                  {{ fs.label }}
                 </span>
               </button>
             </div>
@@ -657,82 +704,125 @@ async function editDeleteSource() {
           <!-- Step 2: Connection details -->
           <template v-if="wizardStep === 'details'">
             <h2 class="text-lg font-semibold text-text-primary">
-              {{ selectedType?.label }} Connection
+              {{ selectedType?.label }}
+              {{ wizardIsDatabase ? "Connection" : "Details" }}
             </h2>
             <p class="mt-1 text-sm text-text-muted">
-              Enter your database connection details.
+              {{
+                wizardIsDatabase
+                  ? "Enter your database connection details."
+                  : "Enter the path to back up."
+              }}
             </p>
 
             <form class="mt-5 space-y-4" @submit.prevent="submitWizard">
-              <div class="grid grid-cols-3 gap-3">
-                <div class="col-span-2">
+              <!-- DATABASE FIELDS -->
+              <template v-if="wizardIsDatabase">
+                <div class="grid grid-cols-3 gap-3">
+                  <div class="col-span-2">
+                    <label
+                      class="mb-1 block text-sm font-medium text-text-primary"
+                    >
+                      Host / IP
+                    </label>
+                    <input
+                      v-model="form.host"
+                      type="text"
+                      required
+                      placeholder="192.168.1.100"
+                      class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      class="mb-1 block text-sm font-medium text-text-primary"
+                    >
+                      Port
+                    </label>
+                    <input
+                      v-model.number="form.port"
+                      type="number"
+                      class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label
+                      class="mb-1 block text-sm font-medium text-text-primary"
+                    >
+                      Username
+                    </label>
+                    <input
+                      v-model="form.username"
+                      type="text"
+                      placeholder="postgres"
+                      class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      class="mb-1 block text-sm font-medium text-text-primary"
+                    >
+                      Password
+                    </label>
+                    <input
+                      v-model="form.password"
+                      type="password"
+                      class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+
+                <div v-if="form.source_type !== 'redis'">
                   <label
                     class="mb-1 block text-sm font-medium text-text-primary"
                   >
-                    Host / IP
+                    Database Name
                   </label>
                   <input
-                    v-model="form.host"
+                    v-model="form.database_name"
                     type="text"
                     required
-                    placeholder="192.168.1.100"
+                    placeholder="myapp_production"
                     class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                 </div>
-                <div>
-                  <label
-                    class="mb-1 block text-sm font-medium text-text-primary"
-                  >
-                    Port
-                  </label>
-                  <input
-                    v-model.number="form.port"
-                    type="number"
-                    class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-              </div>
+              </template>
 
-              <div class="grid grid-cols-2 gap-3">
+              <!-- FILESYSTEM FIELDS -->
+              <template v-else>
                 <div>
                   <label
                     class="mb-1 block text-sm font-medium text-text-primary"
                   >
-                    Username
+                    {{
+                      form.source_type === "docker_volume"
+                        ? "Volume / Mount Path"
+                        : "Directory Path"
+                    }}
                   </label>
                   <input
-                    v-model="form.username"
+                    v-model="form.path"
                     type="text"
-                    placeholder="postgres"
+                    required
+                    :placeholder="
+                      form.source_type === 'docker_volume'
+                        ? '/var/lib/docker/volumes/myapp_data/_data'
+                        : '/data/myapp'
+                    "
                     class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   />
+                  <p class="mt-1 text-xs text-text-muted">
+                    {{
+                      form.source_type === "docker_volume"
+                        ? "Path where the Docker volume is mounted inside the Cellar container."
+                        : "Absolute path accessible from the Cellar container."
+                    }}
+                  </p>
                 </div>
-                <div>
-                  <label
-                    class="mb-1 block text-sm font-medium text-text-primary"
-                  >
-                    Password
-                  </label>
-                  <input
-                    v-model="form.password"
-                    type="password"
-                    class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                </div>
-              </div>
-
-              <div v-if="form.source_type !== 'redis'">
-                <label class="mb-1 block text-sm font-medium text-text-primary">
-                  Database Name
-                </label>
-                <input
-                  v-model="form.database_name"
-                  type="text"
-                  required
-                  placeholder="myapp_production"
-                  class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
+              </template>
 
               <div
                 v-if="wizardError"

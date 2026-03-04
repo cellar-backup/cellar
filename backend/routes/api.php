@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BackupPlanController;
 use App\Http\Controllers\Api\V1\DocumentController;
 use App\Http\Controllers\Api\V1\JobController;
+use App\Http\Controllers\Api\V1\KubernetesController;
 use App\Http\Controllers\Api\V1\NotificationChannelController;
 use App\Http\Controllers\Api\V1\RepositoryController;
 use App\Http\Controllers\Api\V1\SourceController;
@@ -39,6 +40,7 @@ Route::prefix('v1')->group(function () {
         // Repositories
         Route::apiResource('repositories', RepositoryController::class);
         Route::post('repositories/{repository}/test', [RepositoryController::class, 'test']);
+        Route::post('repositories/{repository}/import', [RepositoryController::class, 'import']);
 
         // Sources
         Route::apiResource('sources', SourceController::class);
@@ -69,5 +71,16 @@ Route::prefix('v1')->group(function () {
         // Documents
         Route::apiResource('documents', DocumentController::class);
         Route::post('documents/{document}/test', [DocumentController::class, 'test']);
+
+        // Kubernetes Radar
+        Route::prefix('kubernetes')->group(function () {
+            Route::post('test', [KubernetesController::class, 'test']);
+            Route::post('discover', [KubernetesController::class, 'discover']);
+            Route::get('namespaces', [KubernetesController::class, 'namespaces']);
+            Route::post('import', [KubernetesController::class, 'import']);
+            Route::post('ignore', [KubernetesController::class, 'ignore']);
+            Route::get('ignored', [KubernetesController::class, 'ignored']);
+            Route::delete('ignored/{radarIgnore}', [KubernetesController::class, 'unignore']);
+        });
     });
 });

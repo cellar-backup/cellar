@@ -43,10 +43,31 @@ export interface Archive {
   created_at: string;
 }
 
+export interface Repository {
+  id: string;
+  name: string;
+  backend_type: string;
+  status: string;
+  plan_count: number;
+}
+
+export interface ImportResult {
+  status: string;
+  message: string;
+  archive_count: number;
+  plan: BackupPlan;
+  repo_info: {
+    total_size: number;
+    unique_size: number;
+    archive_count: number;
+  };
+}
+
 export const usePlansStore = defineStore("plans", () => {
   const plans = ref<BackupPlan[]>([]);
   const jobs = ref<Job[]>([]);
   const archives = ref<Archive[]>([]);
+  const repositories = ref<Repository[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
 
@@ -101,6 +122,29 @@ export const usePlansStore = defineStore("plans", () => {
     return data;
   }
 
+  async function fetchRepositories() {
+    try {
+      const { data } = await api.get("/repositories");
+      repositories.value = Array.isArray(data) ? data : (data.data ?? data);
+    } catch {
+      /* silent */
+    }
+  }
+
+  async function importRepository(
+    repoId: string,
+    path: string,
+    name?: string,
+  ): Promise<ImportResult> {
+    const { data } = await api.post(`/repositories/${repoId}/import`, {
+      path,
+      name,
+    });
+    // Refresh plans & archives after import
+    await Promise.all([fetchPlans(), fetchArchives()]);
+    return data;
+  }
+
   async function downloadArchive(archiveId: string) {
     const response = await api.get(`/archives/${archiveId}/download`, {
       responseType: "blob",
@@ -126,11 +170,14 @@ export const usePlansStore = defineStore("plans", () => {
     plans,
     jobs,
     archives,
+    repositories,
     loading,
     error,
     fetchPlans,
     fetchJobs,
     fetchArchives,
+    fetchRepositories,
+    importRepository,
     triggerBackup,
     triggerPrune,
     triggerVerify,

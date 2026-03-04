@@ -16,24 +16,24 @@
 
 ### Architecture (6 containers)
 
-| Container            | Role             | Stack                           |
-|----------------------|------------------|---------------------------------|
-| `cellar-api`         | REST API         | PHP 8.4 + Laravel 12 + Sanctum  |
-| `cellar-worker`      | Async job runner | Laravel Horizon + Redis          |
-| `cellar-scheduler`   | Cron scheduler   | Laravel Scheduler                |
-| `cellar-ui`          | Frontend SPA     | Vue 3 + Vite + Tailwind CSS 4   |
-| `cellar-redis`       | Queue & cache    | Redis 7                          |
-| `cellar-proxy`       | Reverse proxy    | Caddy 2                          |
+| Container          | Role             | Stack                          |
+| ------------------ | ---------------- | ------------------------------ |
+| `cellar-api`       | REST API         | PHP 8.4 + Laravel 12 + Sanctum |
+| `cellar-worker`    | Async job runner | Laravel Horizon + Redis        |
+| `cellar-scheduler` | Cron scheduler   | Laravel Scheduler              |
+| `cellar-ui`        | Frontend SPA     | Vue 3 + Vite + Tailwind CSS 4  |
+| `cellar-redis`     | Queue & cache    | Redis 7                        |
+| `cellar-proxy`     | Reverse proxy    | Caddy 2                        |
 
 **Database:** SQLite by default (zero-config). Optional PostgreSQL override via `docker/docker-compose.postgres.yml`.
 
 ### Roadmap
 
-| Phase          | Version   | Focus                                                          |
-|----------------|-----------|----------------------------------------------------------------|
-| Foundation     | v0.1–v0.3 | Core backup/restore, Borg engine, local + S3, basic UI         |
-| Expansion      | v0.4–v0.7 | Custom documents, restore wizard, multi-backend, notifications |
-| Polish         | v0.8–v1.0 | Multi-user RBAC, audit log, metrics, mobile views, v1.0 launch |
+| Phase      | Version   | Focus                                                          |
+| ---------- | --------- | -------------------------------------------------------------- |
+| Foundation | v0.1–v0.3 | Core backup/restore, Borg engine, local + S3, basic UI         |
+| Expansion  | v0.4–v0.7 | Custom documents, restore wizard, multi-backend, notifications |
+| Polish     | v0.8–v1.0 | Multi-user RBAC, audit log, metrics, mobile views, v1.0 launch |
 
 ---
 
@@ -63,21 +63,22 @@ cellar/
 │   │   ├── Enums/        # 8 PHP backed enums
 │   │   ├── Http/
 │   │   │   ├── Controllers/
-│   │   │   │   └── Api/V1/  # 9 controllers
+│   │   │   │   └── Api/V1/  # 10 controllers
 │   │   │   └── Requests/
 │   │   ├── Jobs/         # 4 queue jobs
-│   │   ├── Models/       # 8 Eloquent models
+│   │   ├── Models/       # 9 Eloquent models
 │   │   ├── Observers/
 │   │   ├── Providers/
 │   │   └── Services/
 │   │       ├── DatabaseDumper.php
 │   │       ├── DatabaseRestorer.php
+│   │       ├── KubernetesDiscovery.php
 │   │       └── Engines/
 │   │           ├── BackupEngine.php  (interface + DTOs)
 │   │           └── BorgEngine.php    (implementation)
 │   ├── config/
 │   │   └── cellar.php    # Cellar-specific config
-│   ├── database/migrations/  # 11 migration files
+│   ├── database/migrations/  # 12 migration files
 │   └── routes/
 │       ├── api.php       # API routes (v1, Sanctum auth)
 │       └── console.php   # Scheduler definitions
@@ -91,17 +92,19 @@ cellar/
 │   │   ├── main.ts
 │   │   ├── lib/api.ts        # Axios instance with auth interceptors
 │   │   ├── router/index.ts   # Vue Router with auth guards
-│   │   ├── stores/           # 3 Pinia stores
+│   │   ├── stores/           # 4 Pinia stores
 │   │   │   ├── auth.ts
 │   │   │   ├── plans.ts
+│   │   │   ├── radar.ts
 │   │   │   └── sources.ts
-│   │   ├── views/            # 8 view components
+│   │   ├── views/            # 9 view components
 │   │   │   ├── ArchivesView.vue
 │   │   │   ├── DashboardView.vue
 │   │   │   ├── JobsView.vue
 │   │   │   ├── LoginView.vue
 │   │   │   ├── LogsView.vue
 │   │   │   ├── PlansView.vue
+│   │   │   ├── RadarView.vue
 │   │   │   ├── SettingsView.vue
 │   │   │   └── SourcesView.vue
 │   │   ├── components/
@@ -109,7 +112,7 @@ cellar/
 │   └── index.html
 │
 └── docker/
-    ├── Dockerfile.api            # PHP 8.4-cli + borg + restic + DB clients
+    ├── Dockerfile.api            # PHP 8.4-cli + borg + restic + kubectl + DB clients
     ├── Dockerfile.ui             # Node 20 build → nginx
     ├── Caddyfile                 # Reverse proxy on :8420
     ├── nginx.conf                # SPA fallback + API proxy
@@ -287,6 +290,7 @@ return [
     'version' => env('CELLAR_VERSION', '0.1.0'),
     'borg_path' => env('CELLAR_BORG_PATH', '/usr/bin/borg'),
     'restic_path' => env('CELLAR_RESTIC_PATH', '/usr/bin/restic'),
+    'kubectl_path' => env('CELLAR_KUBECTL_PATH', '/usr/local/bin/kubectl'),
     'max_parallel_jobs' => (int) env('CELLAR_MAX_PARALLEL_JOBS', 2),
     'log_dir' => env('CELLAR_LOG_DIR', '/var/log/cellar'),
     'admin_name' => env('CELLAR_ADMIN_NAME', 'admin'),
@@ -313,6 +317,7 @@ require-dev:
 ```
 
 Key scripts:
+
 - `composer setup` — install, env, key:generate, migrate, npm install+build
 - `composer dev` — concurrently runs `artisan serve`, `queue:listen`, `pail`, `npm run dev`
 - `composer test` — `config:clear` + `artisan test`
@@ -324,36 +329,46 @@ Key scripts:
 All routes prefixed with `/api/v1`. Auth uses Laravel Sanctum tokens.
 
 ### Public
-| Method | Path                   | Controller/Action            |
-|--------|------------------------|------------------------------|
-| POST   | `auth/login`           | `AuthController@login`       |
-| GET    | `system/health`        | `SystemController@health`    |
+
+| Method | Path            | Controller/Action         |
+| ------ | --------------- | ------------------------- |
+| POST   | `auth/login`    | `AuthController@login`    |
+| GET    | `system/health` | `SystemController@health` |
 
 ### Authenticated (Sanctum)
-| Method | Path                                  | Controller/Action                        |
-|--------|---------------------------------------|------------------------------------------|
-| POST   | `auth/logout`                         | `AuthController@logout`                  |
-| GET    | `auth/me`                             | `AuthController@me`                      |
-| CRUD   | `repositories`                        | `RepositoryController` (apiResource)     |
-| POST   | `repositories/{id}/test`              | `RepositoryController@test`              |
-| CRUD   | `sources`                             | `SourceController` (apiResource)         |
-| POST   | `sources/quick-add`                   | `SourceController@quickAdd`              |
-| POST   | `sources/{id}/test-connection`        | `SourceController@testConnection`        |
-| CRUD   | `plans`                               | `BackupPlanController` (apiResource)     |
-| POST   | `plans/{id}/backup`                   | `BackupPlanController@backup`            |
-| POST   | `plans/{id}/restore`                  | `BackupPlanController@restore`           |
-| POST   | `plans/{id}/prune`                    | `BackupPlanController@prune`             |
-| POST   | `plans/{id}/verify`                   | `BackupPlanController@verify`            |
-| GET    | `jobs`                                | `JobController@index`                    |
-| GET    | `jobs/{id}`                           | `JobController@show`                     |
-| GET    | `archives`                            | `ArchiveController@index`                |
-| GET    | `archives/{id}`                       | `ArchiveController@show`                 |
-| DELETE | `archives/{id}`                       | `ArchiveController@destroy`              |
-| POST   | `archives/{id}/restore`               | `ArchiveController@restore`              |
-| GET    | `archives/{id}/download`              | `ArchiveController@download`             |
-| CRUD   | `notifications`                       | `NotificationChannelController`          |
-| CRUD   | `documents`                           | `DocumentController`                     |
-| POST   | `documents/{id}/test`                 | `DocumentController@test`                |
+
+| Method | Path                           | Controller/Action                    |
+| ------ | ------------------------------ | ------------------------------------ |
+| POST   | `auth/logout`                  | `AuthController@logout`              |
+| GET    | `auth/me`                      | `AuthController@me`                  |
+| CRUD   | `repositories`                 | `RepositoryController` (apiResource) |
+| POST   | `repositories/{id}/test`       | `RepositoryController@test`          |
+| POST   | `repositories/{id}/import`     | `RepositoryController@import`        |
+| CRUD   | `sources`                      | `SourceController` (apiResource)     |
+| POST   | `sources/quick-add`            | `SourceController@quickAdd`          |
+| POST   | `sources/{id}/test-connection` | `SourceController@testConnection`    |
+| CRUD   | `plans`                        | `BackupPlanController` (apiResource) |
+| POST   | `plans/{id}/backup`            | `BackupPlanController@backup`        |
+| POST   | `plans/{id}/restore`           | `BackupPlanController@restore`       |
+| POST   | `plans/{id}/prune`             | `BackupPlanController@prune`         |
+| POST   | `plans/{id}/verify`            | `BackupPlanController@verify`        |
+| GET    | `jobs`                         | `JobController@index`                |
+| GET    | `jobs/{id}`                    | `JobController@show`                 |
+| GET    | `archives`                     | `ArchiveController@index`            |
+| GET    | `archives/{id}`                | `ArchiveController@show`             |
+| DELETE | `archives/{id}`                | `ArchiveController@destroy`          |
+| POST   | `archives/{id}/restore`        | `ArchiveController@restore`          |
+| GET    | `archives/{id}/download`       | `ArchiveController@download`         |
+| CRUD   | `notifications`                | `NotificationChannelController`      |
+| CRUD   | `documents`                    | `DocumentController`                 |
+| POST   | `documents/{id}/test`          | `DocumentController@test`            |
+| POST   | `kubernetes/test`              | `KubernetesController@test`          |
+| POST   | `kubernetes/discover`          | `KubernetesController@discover`      |
+| GET    | `kubernetes/namespaces`        | `KubernetesController@namespaces`    |
+| POST   | `kubernetes/import`            | `KubernetesController@import`        |
+| POST   | `kubernetes/ignore`            | `KubernetesController@ignore`        |
+| GET    | `kubernetes/ignored`           | `KubernetesController@ignored`       |
+| DELETE | `kubernetes/ignored/{id}`      | `KubernetesController@unignore`      |
 
 ---
 
@@ -370,30 +385,39 @@ Uses `CronExpression` library for dynamic per-plan cron matching. Helper functio
 ## 9. Enums
 
 ### `BackendType` — Repository storage backends
+
 `local`, `s3`, `b2`, `r2`, `gcs`, `azure`, `sftp`, `smb`, `nfs`, `rclone`
 
 ### `ChannelType` — Notification channels
+
 `email`, `slack`, `discord`, `telegram`, `gotify`, `ntfy`, `apprise`, `webhook`
 
 ### `EngineType` — Backup engines
+
 `borg`, `restic`
 
 ### `JobStatus` — Job lifecycle states
+
 `pending`, `running`, `success`, `failed`, `cancelled`
 
 ### `JobType` — Job operation types
+
 `backup`, `restore`, `export`, `prune`, `verify`
 
 ### `PlanStatus` — Backup plan health
+
 `healthy`, `warning`, `failed`, `running`, `idle`
 
 ### `RepoStatus` — Repository connectivity
+
 `online`, `offline`, `degraded`, `unknown`
 
 ### `SourceType` — Data source types
+
 `postgresql`, `mysql`, `mariadb`, `mongodb`, `sqlite`, `redis`, `directory`, `docker_volume`
 
 Methods:
+
 - `isDatabase()` — returns `true` for postgresql, mysql, mariadb, mongodb, sqlite, redis
 - `defaultPort()` — returns standard port for DB types (5432, 3306, 27017, 6379)
 
@@ -404,17 +428,20 @@ Methods:
 All models use UUID primary keys (`HasUuids` trait).
 
 ### `User`
+
 - Fields: `name`, `username`, `email`, `password`
 - Traits: `HasApiTokens`, `HasFactory`, `Notifiable`
 - Casts: `email_verified_at` → datetime, `password` → hashed
 
 ### `Repository`
+
 - Fields: `name`, `description`, `backend_type`, `status`, `is_default`, `config`, `capacity_bytes`, `used_bytes`, `last_checked`
 - Casts: `backend_type` → `BackendType`, `status` → `RepoStatus`, `config` → `encrypted:array`
 - Relations: `hasMany(BackupPlan)`
 - Accessor: `plan_count`
 
 ### `Source`
+
 - Fields: `name`, `source_type`, `host`, `port`, `username`, `password`, `database_name`, `path`, `enabled`, `notes`, `extra_config`
 - Casts: `source_type` → `SourceType`, `password` → `encrypted`, `extra_config` → `array`
 - Auto-fill: default port on save, auto-generated name
@@ -422,6 +449,7 @@ All models use UUID primary keys (`HasUuids` trait).
 - Accessors: `is_database`, `display_label`
 
 ### `BackupPlan`
+
 - Fields: `name`, `source_id`, `repository_id`, `engine`, `status`, `schedule_cron`, `schedule_enabled`, `next_run`, `last_run`, `retention_policy`, `compression`, `encryption`, `pre_hook`, `post_hook`
 - Casts: `engine` → `EngineType`, `status` → `PlanStatus`, `retention_policy` → `array`
 - Default retention: `{ keep_daily: 7, keep_weekly: 4, keep_monthly: 6 }`
@@ -429,24 +457,34 @@ All models use UUID primary keys (`HasUuids` trait).
 - Accessors: `source_name`, `source_type`, `repository_name`
 
 ### `Job`
+
 - Table: `backup_jobs`
 - Fields: `plan_id`, `job_type`, `status`, `started_at`, `finished_at`, `log_path`, `error_message`, `metadata`, `created_at`
 - Casts: `job_type` → `JobType`, `status` → `JobStatus`, `metadata` → `array`
 - Relations: `belongsTo(BackupPlan)`
 
 ### `Archive`
+
 - Fields: `plan_id`, `archive_id`, `timestamp`, `size_original`, `size_dedup`, `size_compressed`, `duration`, `file_count`, `metadata`, `created_at`
 - Casts: all sizes → integer, `metadata` → `array`
 - Relations: `belongsTo(BackupPlan)`
 
 ### `NotificationChannel`
+
 - Fields: `name`, `channel_type`, `config`, `events_filter`, `enabled`, `backup_plan_id`
 - Casts: `channel_type` → `ChannelType`, `config` → `encrypted:array`, `events_filter` → `array`
 - Relations: `belongsTo(BackupPlan)`
 
 ### `CustomDocument`
+
 - Fields: `name`, `version`, `description`, `backup_command`, `restore_command`, `health_check`, `env_vars`, `stream_to_engine`
 - Casts: `env_vars` → `array`, `stream_to_engine` → `boolean`
+
+### `RadarIgnore`
+
+- Table: `radar_ignores`
+- Fields: `resource_key` (unique), `namespace`, `name`, `kind`, `source_type`, `reason`
+- Used by Kubernetes Radar to persist ignored discovered resources so they don't reappear on subsequent scans
 
 ---
 
@@ -455,21 +493,25 @@ All models use UUID primary keys (`HasUuids` trait).
 All jobs are queued (Redis via Horizon). They create a `Job` record, update plan status, and handle cleanup on failure.
 
 ### `RunBackup`
+
 - **Timeout:** 7200s, **Tries:** 2
 - Flow: Load plan → create job record → init borg repo if needed → dump database (if DB source) to temp dir → run `borg create` → create `Archive` record → update job status
 - Cleans up temp dump directory in `finally` block
 
 ### `RunPrune`
+
 - **Timeout:** 3600s, **Tries:** 1
 - Runs `borg prune` with plan's retention policy. Supports `dryRun` mode.
 - Reconciles DB archives after pruning (deletes Archive records for pruned archives)
 
 ### `RunRestore`
+
 - **Timeout:** 7200s, **Tries:** 1
 - Extracts borg archive to temp dir → finds dump file → restores to source DB via `DatabaseRestorer`
 - Searches for files with extensions: `.sql.gz`, `.dump`, `.sql`, `.pg_dump`
 
 ### `RunVerify`
+
 - **Timeout:** 3600s, **Tries:** 1
 - Runs `borg check` on repo or specific archive. Records pass/fail in job metadata.
 
@@ -478,20 +520,25 @@ All jobs are queued (Redis via Horizon). They create a `Job` record, update plan
 ## 12. Services
 
 ### `DatabaseDumper`
+
 Dispatches to `pg_dump` (PostgreSQL, custom format `-Fc`) or `mysqldump` (MySQL/MariaDB). Returns `DumpResult` DTO with success, path, size, message.
 
 ### `DatabaseRestorer`
+
 Restores dumps via `pg_restore` (custom format) or `psql` (plain SQL) for PostgreSQL, and `mysql` CLI for MySQL/MariaDB. Auto-detects dump format by reading first 5 bytes (`PGDMP` = custom format).
 
 ### `BackupEngine` (Interface)
+
 Defines contract: `initialize()`, `backup()`, `restore()`, `listArchives()`, `getArchiveInfo()`, `getRepoInfo()`, `prune()`, `verify()`, `deleteArchive()`.
 
 DTOs: `BackupResult`, `RestoreResult`, `PruneResult`, `ArchiveInfo`, `RepoInfo`.
 
 ### `BorgEngine` (Implementation)
+
 Wraps borg CLI commands via Laravel `Process` facade. Parses JSON output (`--json` flag). Handles environment variables (`BORG_PASSPHRASE`, relocated repo access). Exit code 0-1 = OK, 2+ = error.
 
 Key methods:
+
 - `initialize(repoPath, encryption='none')` — `borg init`
 - `backup(repoPath, sourcePaths, archiveName, excludePatterns, compression='lz4')` — `borg create --stats --json`
 - `restore(repoPath, archiveId, targetPath)` — `borg extract` (sets CWD to targetPath)
@@ -500,28 +547,53 @@ Key methods:
 - `verify(repoPath, archiveId?)` — `borg check`
 - `deleteArchive(repoPath, archiveId)` — `borg delete`
 
+### `KubernetesDiscovery`
+
+Auto-discovers databases and backup-eligible PVCs in a Kubernetes cluster. Works in two modes:
+
+1. **In-cluster** — uses default ServiceAccount (no kubeconfig needed)
+2. **Out-of-cluster** — uses a kubeconfig file and/or explicit context
+
+Wraps `kubectl` via Laravel `Process` facade with JSON output parsing.
+
+Key features:
+
+- **Image detection** — maps container images to source types (e.g., `postgres:16` → `postgresql`, `redis:7` → `redis`)
+- **Port detection** — known DB ports (5432, 3306, 27017, 6379) trigger source type classification
+- **Pod scanning** — inspects all pods for database containers
+- **Service scanning** — inspects service ports for database endpoints
+- **PVC scanning** — lists bound PersistentVolumeClaims as potential directory backup targets
+- **Deduplication** — composite key `namespace:name:source_type` prevents duplicate entries
+- Returns discovered resources with host (`.svc.cluster.local`), port, namespace, kind, image info
+
 ---
 
 ## 13. Controllers (Api/V1)
 
 ### `AuthController`
+
 - `login` — Validates username/password, issues Sanctum plain-text token. Supports login by username or email.
 - `logout` — Revokes current token.
 - `me` — Returns authenticated user.
 
 ### `SystemController`
+
 - `health` — Returns status + version + database/redis connectivity checks.
 
 ### `RepositoryController`
+
 - Standard CRUD (apiResource).
 - `test` — For local backends: checks `is_dir`, reports disk space. Updates status to online/offline.
+- `import` — Imports an existing Borg repository: validates path, checks for borg `README` file, calls `getRepoInfo()` + `listArchives()` + `getArchiveInfo()` per archive. Creates a Source (type=directory), BackupPlan (schedule_enabled=false), and Archive records. Stores `imported_paths` mapping in repo config. Returns 201 with archive count.
 
 ### `SourceController`
+
 - Standard CRUD.
 - `quickAdd` — Creates Source + BackupPlan in one call. Auto-creates default local repository if none exists.
-- `testConnection` — Runs `pg_isready` (PostgreSQL) or `mysqladmin ping` (MySQL/MariaDB) to test connectivity.
+- `testConnection` — For database sources: runs `pg_isready` (PostgreSQL) or `mysqladmin ping` (MySQL/MariaDB). For filesystem sources (directory/docker_volume/sqlite): validates path with `file_exists()`, `is_dir()`, `is_readable()`.
 
 ### `BackupPlanController`
+
 - Standard CRUD with eager-loaded `source` and `repository`.
 - `backup` — Dispatches `RunBackup` job.
 - `restore` — Dispatches `RunRestore` job (requires `archive_id`).
@@ -529,25 +601,39 @@ Key methods:
 - `verify` — Dispatches `RunVerify` job (optional `archive_id`).
 
 ### `JobController`
+
 - Read-only `index`/`show`. Supports filtering by `plan`, `job_type`, `status`. Paginated (default 25).
 
 ### `ArchiveController`
+
 - `index` — Paginated, filterable by `plan`.
 - `show` / `destroy` — Standard.
 - `restore` — Dispatches `RunRestore` job.
 - `download` — Extracts archive to temp dir, converts custom-format dumps to plain SQL, streams as download. Cleanup via `app()->terminating()`.
 
 ### `NotificationChannelController`
+
 - Standard CRUD (apiResource).
 
 ### `DocumentController`
+
 - Standard CRUD. `test` action is a stub (not yet implemented).
+
+### `KubernetesController`
+
+- `test` — Cluster connectivity check via `KubernetesDiscovery::testConnection()`.
+- `discover` — Runs full discovery (pods, services, PVCs), filters out ignored resources, annotates `already_added` for existing sources.
+- `namespaces` — Lists available namespaces.
+- `import` — Batch-creates Source records from selected discovered resources.
+- `ignore` — Persists a resource to `RadarIgnore` so it no longer appears in discovery.
+- `ignored` — Lists all ignored resources.
+- `unignore` — Removes a resource from the ignore list.
 
 ---
 
 ## 14. Database Migrations
 
-11 migration files:
+12 migration files:
 
 1. `0001_01_01_000000_create_users_table.php` — users, password_reset_tokens, sessions
 2. `0001_01_01_000001_create_cache_table.php` — cache, cache_locks
@@ -560,12 +646,14 @@ Key methods:
 9. `2024_01_01_000014_create_archives_table.php`
 10. `2024_01_01_000015_create_notification_channels_table.php`
 11. `2024_01_01_000016_create_custom_documents_table.php`
+12. `2024_01_01_000017_create_radar_ignores_table.php` — K8s Radar ignore list (resource_key unique, namespace, name, kind, source_type, reason)
 
 ---
 
 ## 15. Frontend
 
 ### Tech Stack
+
 - **Vue 3.5+**, **Pinia 2.2+**, **Vue Router 4.4+**
 - **Tailwind CSS 4**, **Radix Vue** (headless UI), **Lucide icons**
 - **Axios** for API calls, **Chart.js + vue-chartjs** for charts
@@ -573,6 +661,7 @@ Key methods:
 - Dev: ESLint 9, Prettier, Vitest, jsdom
 
 ### `frontend/src/lib/api.ts` — Axios Instance
+
 ```typescript
 const api = axios.create({ baseURL: "/api/v1" });
 // Request: attaches Bearer token from localStorage("cellar_access_token")
@@ -580,19 +669,22 @@ const api = axios.create({ baseURL: "/api/v1" });
 ```
 
 ### `frontend/src/App.vue`
+
 - Public pages (login): full-screen `<RouterView>`
 - Authenticated pages: sidebar (`AppSidebar`) + main content area
 
-### Router — 7 routes
-| Path        | Name       | View               | Auth Required |
-|-------------|------------|---------------------|:---:|
-| `/login`    | login      | LoginView.vue       | No  |
-| `/`         | dashboard  | DashboardView.vue   | Yes |
-| `/sources`  | sources    | SourcesView.vue     | Yes |
-| `/plans`    | plans      | PlansView.vue       | Yes |
-| `/archives` | archives   | ArchivesView.vue    | Yes |
-| `/jobs`     | jobs       | JobsView.vue        | Yes |
-| `/settings` | settings   | SettingsView.vue    | Yes |
+### Router — 8 routes
+
+| Path        | Name      | View              | Auth Required |
+| ----------- | --------- | ----------------- | :-----------: |
+| `/login`    | login     | LoginView.vue     |      No       |
+| `/`         | dashboard | DashboardView.vue |      Yes      |
+| `/sources`  | sources   | SourcesView.vue   |      Yes      |
+| `/plans`    | plans     | PlansView.vue     |      Yes      |
+| `/archives` | archives  | ArchivesView.vue  |      Yes      |
+| `/jobs`     | jobs      | JobsView.vue      |      Yes      |
+| `/radar`    | radar     | RadarView.vue     |      Yes      |
+| `/settings` | settings  | SettingsView.vue  |      Yes      |
 
 Auth guard: on first load validates token via `GET /auth/me`; subsequent navigations check in-memory state.
 
@@ -604,26 +696,38 @@ Auth guard: on first load validates token via `GET /auth/me`; subsequent navigat
 
 **`sources.ts`** — Manages Source[]. Methods: `fetchSources()`, `quickAdd(payload)`, `getSource(id)`, `updateSource(id, payload)`, `testConnection(id)`, `deleteSource(id)`.
 
-### Views (8 files)
-`ArchivesView.vue`, `DashboardView.vue`, `JobsView.vue`, `LoginView.vue`, `LogsView.vue`, `PlansView.vue`, `SettingsView.vue`, `SourcesView.vue`
+**`radar.ts`** — Manages K8s Radar state. Tracks discovered resources, ignored list, connection status. Methods: `testConnection()`, `discover()`, `importResources(selected)`, `ignoreResource(resource, reason?)`, `fetchIgnored()`, `unignore(id)`.
+
+### Views (9 files)
+
+`ArchivesView.vue`, `DashboardView.vue`, `JobsView.vue`, `LoginView.vue`, `LogsView.vue`, `PlansView.vue`, `RadarView.vue`, `SettingsView.vue`, `SourcesView.vue`
+
+#### Notable View Features
+
+- **SourcesView** — Wizard supports two categories: Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis) and Filesystem (Directory, Docker Volume). Step 2 form fields adapt based on category.
+- **PlansView** — Includes "Import Borg Repo" modal for importing existing Borg repositories into Cellar.
+- **RadarView** — K8s cluster discovery UI: connection config (kubeconfig path, context, namespace), scan results as selectable list, bulk import, per-resource ignore with "Ignored" panel toggle.
 
 ---
 
 ## 16. Docker
 
 ### `Dockerfile.api`
+
 - Base: `php:8.4-cli`
-- Installs: borgbackup, restic, postgresql-client, default-mysql-client, supervisor, cron
+- Installs: borgbackup, restic, postgresql-client, default-mysql-client, supervisor, cron, kubectl
 - PHP extensions: pdo, pdo_mysql, pdo_pgsql, pdo_sqlite, zip, pcntl, bcmath, redis (PECL)
 - Runs Composer install, copies backend code, creates data dirs
 - Entrypoint: `docker/entrypoint.sh`
 - Default CMD: `php artisan serve --host=0.0.0.0 --port=8000`
 
 ### `Dockerfile.ui`
+
 - Build stage: `node:20-alpine`, `npm ci`, `npm run build`
 - Production stage: `nginx:alpine`, serves `/app/dist` with `nginx.conf`
 
 ### `entrypoint.sh`
+
 1. Creates data directories
 2. Copies `.env.docker` → `.env` (if exists)
 3. Persists `APP_KEY` across container rebuilds (stored in `/app/data/.app_key`)
@@ -633,16 +737,20 @@ Auth guard: on first load validates token via `GET /auth/me`; subsequent navigat
 7. Execs into main process
 
 ### `Caddyfile`
+
 Listens on `:8420`. Routes:
+
 - `/api/*` → `cellar-api:8000`
 - `/horizon/*` → `cellar-api:8000`
 - `/sanctum/*` → `cellar-api:8000`
 - Everything else → `cellar-ui:80` (SPA catch-all)
 
 ### `nginx.conf`
+
 SPA fallback (`try_files $uri $uri/ /index.html`), API proxy to `cellar-api:8000`, WebSocket proxy at `/ws/`, static asset caching (1 year).
 
 ### `docker-compose.postgres.yml` (override)
+
 Adds `cellar-db` (PostgreSQL 16), overrides API/worker/scheduler envs with `CELLAR_DB_*` variables.
 
 ---
@@ -684,3 +792,6 @@ clean       # remove node_modules + dist + vendor
 8. **Schedule per plan** — Each `BackupPlan` has its own cron expression, evaluated every minute by the scheduler.
 9. **Auto-pruning** — Prune runs 30 minutes after each scheduled backup.
 10. **Caddy reverse proxy** — Handles routing between SPA and API, with admin-off for minimal footprint.
+11. **Borg repo import** — Importing creates an anchor Source (type=directory) + BackupPlan (schedule_enabled=false) to satisfy FK constraints, then creates Archive records for each discovered archive. Stored `imported_paths` mapping in repo config for traceability.
+12. **Kubernetes Radar** — Uses kubectl CLI (not client-go) via Laravel Process facade for simplicity. Supports both in-cluster ServiceAccount and out-of-cluster kubeconfig. Ignore list persisted in `radar_ignores` table to prevent rediscovery noise.
+13. **Non-database sources** — Frontend wizard split into Database/Filesystem categories. Backend `testConnection()` validates filesystem paths instead of rejecting non-DB types.

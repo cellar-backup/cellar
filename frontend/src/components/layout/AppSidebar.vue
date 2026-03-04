@@ -8,6 +8,7 @@ import {
   Archive,
   ClipboardList,
   ScrollText,
+  Radar,
   Settings,
   ChevronLeft,
   LogOut,
@@ -25,6 +26,7 @@ const navItems = [
   { label: "Backup Plans", icon: ClipboardList, to: "/plans" },
   { label: "Archives", icon: Archive, to: "/archives" },
   { label: "Jobs", icon: ScrollText, to: "/jobs" },
+  { label: "Radar", icon: Radar, to: "/radar" },
   { label: "Settings", icon: Settings, to: "/settings" },
 ];
 

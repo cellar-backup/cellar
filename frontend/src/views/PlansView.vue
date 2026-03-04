@@ -9,6 +9,7 @@ import {
   CircleX,
   Clock,
   Loader2,
+  Import,
 } from "lucide-vue-next";
 
 const store = usePlansStore();
@@ -113,6 +114,63 @@ function timeAgo(dateStr: string | null) {
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
 }
+
+// ---- Import repository modal ----
+const showImport = ref(false);
+const importLoading = ref(false);
+const importError = ref("");
+const importResult = ref<{
+  message: string;
+  archiveCount: number;
+} | null>(null);
+
+const importForm = ref({
+  path: "",
+  name: "",
+  repositoryId: "",
+});
+
+async function openImport() {
+  showImport.value = true;
+  importError.value = "";
+  importResult.value = null;
+  importForm.value = { path: "", name: "", repositoryId: "" };
+  // Fetch repositories for the dropdown
+  await store.fetchRepositories();
+  // Auto-select default repo if available
+  if (store.repositories.length > 0 && !importForm.value.repositoryId) {
+    importForm.value.repositoryId = store.repositories[0].id;
+  }
+}
+
+async function submitImport() {
+  importLoading.value = true;
+  importError.value = "";
+  try {
+    const result = await store.importRepository(
+      importForm.value.repositoryId,
+      importForm.value.path,
+      importForm.value.name || undefined,
+    );
+    importResult.value = {
+      message: result.message,
+      archiveCount: result.archive_count,
+    };
+  } catch (e: unknown) {
+    if (e && typeof e === "object" && "response" in e) {
+      const resp = (e as { response: { data: { message?: string } } }).response;
+      importError.value = resp.data?.message ?? "Failed to import repository.";
+    } else {
+      importError.value = "Failed to import repository.";
+    }
+  } finally {
+    importLoading.value = false;
+  }
+}
+
+function closeImport() {
+  showImport.value = false;
+}
 </script>
 
 <template>
@@ -125,6 +183,13 @@ function timeAgo(dateStr: string | null) {
           Manage schedules, trigger backups, and monitor status.
         </p>
       </div>
+      <button
+        class="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-muted hover:bg-surface-raised hover:text-text-primary transition-colors"
+        @click="openImport"
+      >
+        <Import class="h-4 w-4" />
+        Import Borg Repo
+      </button>
     </div>
 
     <!-- Loading -->
@@ -235,5 +300,144 @@ function timeAgo(dateStr: string | null) {
         </div>
       </div>
     </div>
+
+    <!-- ======== Import Borg Repo Modal ======== -->
+    <Teleport to="body">
+      <div
+        v-if="showImport"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        @click.self="closeImport"
+      >
+        <div
+          class="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-xl"
+        >
+          <!-- Success state -->
+          <template v-if="importResult">
+            <div class="text-center py-4">
+              <CircleCheck class="mx-auto h-14 w-14 text-success" />
+              <h2 class="mt-4 text-lg font-semibold text-text-primary">
+                Repository Imported!
+              </h2>
+              <p class="mt-2 text-sm text-text-muted">
+                {{ importResult.message }}
+              </p>
+              <div
+                class="mt-4 rounded-lg bg-surface-raised px-4 py-3 text-sm text-text-primary"
+              >
+                <span class="text-text-muted">Archives imported:</span>
+                {{ importResult.archiveCount }}
+              </div>
+              <button
+                class="mt-6 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
+                @click="closeImport"
+              >
+                Done
+              </button>
+            </div>
+          </template>
+
+          <!-- Import form -->
+          <template v-else>
+            <div class="flex items-center gap-3 mb-5">
+              <div
+                class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary"
+              >
+                <Import class="h-5 w-5" />
+              </div>
+              <div>
+                <h2 class="text-lg font-semibold text-text-primary">
+                  Import Borg Repository
+                </h2>
+                <p class="text-sm text-text-muted">
+                  Point to an existing borg repo to import its archives.
+                </p>
+              </div>
+            </div>
+
+            <form class="space-y-4" @submit.prevent="submitImport">
+              <!-- Target repository -->
+              <div>
+                <label class="mb-1 block text-sm font-medium text-text-primary">
+                  Target Repository
+                </label>
+                <select
+                  v-model="importForm.repositoryId"
+                  required
+                  class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="" disabled>Select a repository…</option>
+                  <option
+                    v-for="repo in store.repositories"
+                    :key="repo.id"
+                    :value="repo.id"
+                  >
+                    {{ repo.name }} ({{ repo.backend_type }})
+                  </option>
+                </select>
+              </div>
+
+              <!-- Borg repo path -->
+              <div>
+                <label class="mb-1 block text-sm font-medium text-text-primary">
+                  Borg Repository Path
+                </label>
+                <input
+                  v-model="importForm.path"
+                  type="text"
+                  required
+                  placeholder="/data/repositories/my-existing-repo"
+                  class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <p class="mt-1 text-xs text-text-muted">
+                  Path to an existing borg repository on the container
+                  filesystem.
+                </p>
+              </div>
+
+              <!-- Name (optional) -->
+              <div>
+                <label class="mb-1 block text-sm font-medium text-text-primary">
+                  Name
+                  <span class="font-normal text-text-muted">(optional)</span>
+                </label>
+                <input
+                  v-model="importForm.name"
+                  type="text"
+                  placeholder="Auto-generated from path"
+                  class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <!-- Error -->
+              <div
+                v-if="importError"
+                class="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger"
+              >
+                {{ importError }}
+              </div>
+
+              <!-- Actions -->
+              <div class="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  class="rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-muted hover:bg-surface-raised transition-colors"
+                  @click="closeImport"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  :disabled="importLoading"
+                  class="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  <Loader2 v-if="importLoading" class="h-4 w-4 animate-spin" />
+                  {{ importLoading ? "Importing…" : "Import Repository" }}
+                </button>
+              </div>
+            </form>
+          </template>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

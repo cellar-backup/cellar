@@ -14,6 +14,9 @@ return [
     'borg_path' => env('CELLAR_BORG_PATH', '/usr/bin/borg'),
     'restic_path' => env('CELLAR_RESTIC_PATH', '/usr/bin/restic'),
 
+    // Kubernetes discovery
+    'kubectl_path' => env('CELLAR_KUBECTL_PATH', '/usr/local/bin/kubectl'),
+
     // Concurrency
     'max_parallel_jobs' => (int) env('CELLAR_MAX_PARALLEL_JOBS', 2),
 

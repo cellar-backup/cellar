@@ -128,15 +128,44 @@ class SourceController extends Controller
     }
 
     /**
-     * Test database connection.
+     * Test source connectivity (database connection or filesystem path).
      */
     public function testConnection(Source $source): JsonResponse
     {
         if (! $source->getIsDatabase()) {
+            // Filesystem validation for directory / docker_volume / sqlite
+            $path = $source->path;
+
+            if (empty($path)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No path configured for this source.',
+                ], 422);
+            }
+
+            if (! file_exists($path)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => "Path not found: {$path}",
+                ], 422);
+            }
+
+            $isDir = is_dir($path);
+            $readable = is_readable($path);
+
+            if (! $readable) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => "Path exists but is not readable: {$path}",
+                ], 422);
+            }
+
             return response()->json([
-                'status' => 'error',
-                'message' => 'Connection test only available for database sources.',
-            ], 400);
+                'status' => 'ok',
+                'message' => $isDir
+                    ? 'Directory is accessible and readable.'
+                    : 'File is accessible and readable.',
+            ]);
         }
 
         $host = $source->host ?: 'localhost';
