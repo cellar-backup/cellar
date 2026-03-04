@@ -274,11 +274,11 @@ class KubernetesController extends Controller
             $source = Source::create([
                 'source_type' => $r['source_type'],
                 'name' => $sourceName,
-                'host' => $r['host'] ?? null,
+                'host' => $r['host'] ?? '',
                 'port' => $r['port'] ?? null,
-                'username' => $r['username'] ?? null,
-                'password' => $r['password'] ?? null,
-                'database_name' => $r['database_name'] ?? null,
+                'username' => $r['username'] ?? '',
+                'password' => $r['password'] ?? '',
+                'database_name' => $r['database_name'] ?? '',
                 'notes' => "Discovered by Radar from cluster \"{$cluster->name}\" in namespace {$r['namespace']} ({$r['kind']} resource)",
                 'enabled' => true,
             ]);

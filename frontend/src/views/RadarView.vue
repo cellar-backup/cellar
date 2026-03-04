@@ -323,8 +323,7 @@ async function confirmImport() {
   const overrides: ImportOverride[] = [];
 
   for (const item of importReviewItems.value) {
-    const dbNames =
-      item.database_names.length > 0 ? item.database_names : [""];
+    const dbNames = item.database_names.length > 0 ? item.database_names : [""];
     for (const dbName of dbNames) {
       resources.push(item.resource);
       overrides.push({
