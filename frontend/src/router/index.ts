@@ -21,11 +21,6 @@ const router = createRouter({
       component: () => import("@/views/SourcesView.vue"),
     },
     {
-      path: "/sources/:id",
-      name: "source-detail",
-      component: () => import("@/views/SourceDetailView.vue"),
-    },
-    {
       path: "/plans",
       name: "plans",
       component: () => import("@/views/PlansView.vue"),

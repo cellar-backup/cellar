@@ -8,11 +8,12 @@ import {
   Loader2,
   Trash2,
   Pencil,
+  Save,
 } from "lucide-vue-next";
-import { useRouter } from "vue-router";
-import { useSourcesStore, type QuickAddPayload } from "@/stores/sources";
-
-const router = useRouter();
+import {
+  useSourcesStore,
+  type QuickAddPayload,
+} from "@/stores/sources";
 
 const DB_TYPES = [
   { value: "postgresql", label: "PostgreSQL", defaultPort: 5432 },
@@ -124,10 +125,142 @@ async function deleteSource(id: string, name: string) {
   )
     return;
   await store.deleteSource(id);
+  // Close edit modal if deleting the currently-open source
+  if (editSourceId.value === id) closeEdit();
 }
 
 function sourceIcon(type: string) {
   return type === "directory" || type === "docker_volume" ? Server : Database;
+}
+
+// ---- Edit modal state ----
+const showEdit = ref(false);
+const editSourceId = ref<string | null>(null);
+const editLoading = ref(false);
+const editSaving = ref(false);
+const editSuccess = ref(false);
+const editError = ref("");
+const editTestResult = ref<{ ok: boolean; detail: string } | null>(null);
+
+const editForm = ref({
+  name: "",
+  source_type: "",
+  host: "",
+  port: null as number | null,
+  username: "",
+  password: "",
+  database_name: "",
+  path: "",
+  notes: "",
+  enabled: true,
+});
+
+const editTypeInfo = computed(
+  () => DB_TYPES.find((t) => t.value === editForm.value.source_type) ?? null,
+);
+
+const editIsDatabase = computed(() => {
+  const t = editForm.value.source_type;
+  return t !== "directory" && t !== "docker_volume" && t !== "sqlite";
+});
+
+async function openEdit(sourceId: string) {
+  showEdit.value = true;
+  editSourceId.value = sourceId;
+  editLoading.value = true;
+  editError.value = "";
+  editSuccess.value = false;
+  editTestResult.value = null;
+  try {
+    const source = await store.getSource(sourceId);
+    editForm.value = {
+      name: source.name ?? "",
+      source_type: source.source_type ?? "",
+      host: source.host ?? "",
+      port: source.port ?? null,
+      username: source.username ?? "",
+      password: "",
+      database_name: source.database_name ?? "",
+      path: source.path ?? "",
+      notes: source.notes ?? "",
+      enabled: source.enabled ?? true,
+    };
+  } catch {
+    showEdit.value = false;
+  } finally {
+    editLoading.value = false;
+  }
+}
+
+function closeEdit() {
+  showEdit.value = false;
+  editSourceId.value = null;
+}
+
+async function saveEdit() {
+  if (!editSourceId.value) return;
+  editSaving.value = true;
+  editError.value = "";
+  editSuccess.value = false;
+  try {
+    const payload: Record<string, unknown> = { ...editForm.value };
+    if (!payload.password) delete payload.password;
+    await store.updateSource(editSourceId.value, payload);
+    editSuccess.value = true;
+    // Refresh the list to reflect changes
+    await store.fetchSources();
+    setTimeout(() => (editSuccess.value = false), 3000);
+  } catch (e: unknown) {
+    if (e && typeof e === "object" && "response" in e) {
+      const resp = (e as { response: { data: unknown } }).response;
+      const data = resp.data;
+      if (data && typeof data === "object" && "errors" in data) {
+        const errors = (data as { errors: Record<string, string[]> }).errors;
+        editError.value = Object.values(errors).flat().join(", ");
+      } else {
+        editError.value =
+          typeof data === "string" ? data : "Failed to save changes.";
+      }
+    } else {
+      editError.value = "Failed to save changes.";
+    }
+  } finally {
+    editSaving.value = false;
+  }
+}
+
+async function editTestConnection() {
+  if (!editSourceId.value) return;
+  editTestResult.value = null;
+  testing.value = editSourceId.value;
+  try {
+    const result = await store.testConnection(editSourceId.value);
+    editTestResult.value = {
+      ok: result.status === "ok",
+      detail: result.message,
+    };
+  } catch {
+    editTestResult.value = {
+      ok: false,
+      detail: "Test failed — check container logs.",
+    };
+  } finally {
+    testing.value = null;
+  }
+}
+
+async function editDeleteSource() {
+  if (!editSourceId.value) return;
+  const name = editForm.value.name;
+  const id = editSourceId.value;
+  if (
+    !confirm(
+      `Delete source "${name}"? Associated backup plans will also be removed.`,
+    )
+  )
+    return;
+  await store.deleteSource(id);
+  closeEdit();
 }
 </script>
 
@@ -178,7 +311,7 @@ function sourceIcon(type: string) {
         v-for="source in store.sources"
         :key="source.id"
         class="flex items-center justify-between rounded-xl border border-border bg-surface p-4 hover:border-primary/30 transition-colors cursor-pointer"
-        @click="router.push(`/sources/${source.id}`)"
+        @click="openEdit(source.id)"
       >
         <div class="flex items-center gap-4">
           <div
@@ -225,7 +358,7 @@ function sourceIcon(type: string) {
           <button
             class="rounded-lg p-1.5 text-text-muted hover:bg-surface-raised hover:text-text-primary transition-colors"
             title="Edit source"
-            @click.stop="router.push(`/sources/${source.id}`)"
+            @click.stop="openEdit(source.id)"
           >
             <Pencil class="h-4 w-4" />
           </button>
@@ -239,6 +372,249 @@ function sourceIcon(type: string) {
         </div>
       </div>
     </div>
+
+    <!-- ======== Edit Source Modal ======== -->
+    <Teleport to="body">
+      <div
+        v-if="showEdit"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        @click.self="closeEdit"
+      >
+        <div
+          class="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-xl"
+        >
+          <!-- Loading -->
+          <div v-if="editLoading" class="py-8 text-center text-text-muted">
+            <Loader2 class="mx-auto h-8 w-8 animate-spin" />
+            <p class="mt-2 text-sm">Loading source…</p>
+          </div>
+
+          <!-- Edit form -->
+          <template v-else>
+            <div class="flex items-center gap-3 mb-5">
+              <div
+                class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary"
+              >
+                <component
+                  :is="sourceIcon(editForm.source_type)"
+                  class="h-5 w-5"
+                />
+              </div>
+              <div>
+                <h2 class="text-lg font-semibold text-text-primary">
+                  Edit Source
+                </h2>
+                <p class="text-sm text-text-muted">
+                  {{ editTypeInfo?.label ?? editForm.source_type }}
+                </p>
+              </div>
+            </div>
+
+            <form class="space-y-4" @submit.prevent="saveEdit">
+              <!-- Name -->
+              <div>
+                <label class="mb-1 block text-sm font-medium text-text-primary">
+                  Name
+                </label>
+                <input
+                  v-model="editForm.name"
+                  type="text"
+                  placeholder="Auto-generated if blank"
+                  class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <!-- Host / Port -->
+              <div v-if="editIsDatabase" class="grid grid-cols-3 gap-3">
+                <div class="col-span-2">
+                  <label
+                    class="mb-1 block text-sm font-medium text-text-primary"
+                  >
+                    Host / IP
+                  </label>
+                  <input
+                    v-model="editForm.host"
+                    type="text"
+                    placeholder="192.168.1.100"
+                    class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="mb-1 block text-sm font-medium text-text-primary"
+                  >
+                    Port
+                  </label>
+                  <input
+                    v-model.number="editForm.port"
+                    type="number"
+                    class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <!-- Username / Password -->
+              <div v-if="editIsDatabase" class="grid grid-cols-2 gap-3">
+                <div>
+                  <label
+                    class="mb-1 block text-sm font-medium text-text-primary"
+                  >
+                    Username
+                  </label>
+                  <input
+                    v-model="editForm.username"
+                    type="text"
+                    placeholder="postgres"
+                    class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="mb-1 block text-sm font-medium text-text-primary"
+                  >
+                    Password
+                  </label>
+                  <input
+                    v-model="editForm.password"
+                    type="password"
+                    placeholder="Leave blank to keep current"
+                    class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <!-- Database Name -->
+              <div v-if="editIsDatabase && editForm.source_type !== 'redis'">
+                <label class="mb-1 block text-sm font-medium text-text-primary">
+                  Database Name
+                </label>
+                <input
+                  v-model="editForm.database_name"
+                  type="text"
+                  placeholder="myapp_production"
+                  class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <!-- Path -->
+              <div v-if="!editIsDatabase || editForm.source_type === 'sqlite'">
+                <label class="mb-1 block text-sm font-medium text-text-primary">
+                  Path
+                </label>
+                <input
+                  v-model="editForm.path"
+                  type="text"
+                  placeholder="/data/myapp"
+                  class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <!-- Notes -->
+              <div>
+                <label class="mb-1 block text-sm font-medium text-text-primary">
+                  Notes
+                </label>
+                <textarea
+                  v-model="editForm.notes"
+                  rows="2"
+                  placeholder="Optional notes about this source"
+                  class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary resize-y"
+                />
+              </div>
+
+              <!-- Enabled toggle -->
+              <label class="flex items-center gap-3 cursor-pointer">
+                <input
+                  v-model="editForm.enabled"
+                  type="checkbox"
+                  class="h-4 w-4 rounded border-border accent-primary"
+                />
+                <span class="text-sm font-medium text-text-primary">
+                  Enabled
+                </span>
+              </label>
+
+              <!-- Error / Success -->
+              <div
+                v-if="editError"
+                class="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger"
+              >
+                {{ editError }}
+              </div>
+              <div
+                v-if="editSuccess"
+                class="flex items-center gap-2 rounded-lg bg-success/10 px-3 py-2 text-sm text-success"
+              >
+                <CircleCheck class="h-4 w-4" />
+                Changes saved.
+              </div>
+
+              <!-- Actions -->
+              <div
+                class="flex items-center justify-between border-t border-border pt-4"
+              >
+                <div class="flex items-center gap-2">
+                  <button
+                    v-if="editIsDatabase"
+                    type="button"
+                    :disabled="testing === editSourceId"
+                    class="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-raised transition-colors disabled:opacity-50"
+                    @click="editTestConnection"
+                  >
+                    <Loader2
+                      v-if="testing === editSourceId"
+                      class="inline h-3.5 w-3.5 animate-spin mr-1"
+                    />
+                    {{
+                      testing === editSourceId ? "Testing…" : "Test Connection"
+                    }}
+                  </button>
+                  <span
+                    v-if="editTestResult"
+                    class="text-xs"
+                    :class="editTestResult.ok ? 'text-success' : 'text-danger'"
+                  >
+                    <CircleCheck
+                      v-if="editTestResult.ok"
+                      class="inline h-4 w-4"
+                    />
+                    <CircleX v-else class="inline h-4 w-4" />
+                    {{ editTestResult.detail }}
+                  </span>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    class="rounded-lg p-2 text-text-muted hover:bg-danger/10 hover:text-danger transition-colors"
+                    title="Delete source"
+                    @click="editDeleteSource"
+                  >
+                    <Trash2 class="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-muted hover:bg-surface-raised transition-colors"
+                    @click="closeEdit"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    :disabled="editSaving"
+                    class="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    <Loader2 v-if="editSaving" class="h-4 w-4 animate-spin" />
+                    <Save v-else class="h-4 w-4" />
+                    {{ editSaving ? "Saving…" : "Save" }}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </template>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- ======== Quick-Add Wizard Modal ======== -->
     <Teleport to="body">
