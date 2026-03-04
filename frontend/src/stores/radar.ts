@@ -21,10 +21,20 @@ export interface DiscoveredResource {
   image: string | null;
   host: string | null;
   port: number | null;
+  external_host: string | null;
+  external_port: number | null;
+  node_port: number | null;
+  service_type: string | null;
   capacity?: string;
   labels: Record<string, string>;
   already_added: boolean;
   resource_key: string;
+}
+
+export interface ImportOverride {
+  resource_key: string;
+  host: string;
+  port: number | null;
 }
 
 export interface RadarIgnoreEntry {
@@ -194,17 +204,25 @@ export const useRadarStore = defineStore("radar", () => {
 
   async function importResources(
     selected: DiscoveredResource[],
+    overrides?: ImportOverride[],
   ): Promise<{ message: string; count: number }> {
     if (!activeClusterId.value) throw new Error("No cluster selected.");
 
-    const payload = selected.map((r) => ({
-      source_type: r.source_type,
-      name: r.name,
-      namespace: r.namespace,
-      host: r.host,
-      port: r.port,
-      kind: r.kind,
-    }));
+    const overrideMap = new Map(
+      (overrides ?? []).map((o) => [o.resource_key, o]),
+    );
+
+    const payload = selected.map((r) => {
+      const ov = overrideMap.get(r.resource_key);
+      return {
+        source_type: r.source_type,
+        name: r.name,
+        namespace: r.namespace,
+        host: ov?.host ?? r.host,
+        port: ov?.port ?? r.port,
+        kind: r.kind,
+      };
+    });
 
     const { data } = await api.post(
       `/kubernetes/clusters/${activeClusterId.value}/import`,

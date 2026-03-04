@@ -4,6 +4,7 @@ import {
   useRadarStore,
   type DiscoveredResource,
   type RadarCluster,
+  type ImportOverride,
 } from "@/stores/radar";
 import {
   Radar,
@@ -45,6 +46,16 @@ const selected = ref<Set<string>>(new Set());
 const importLoading = ref(false);
 const importMessage = ref<{ text: string; ok: boolean } | null>(null);
 const showIgnored = ref(false);
+
+// ── Import review modal state ──
+const showImportReview = ref(false);
+const importReviewItems = ref<
+  Array<{
+    resource: DiscoveredResource;
+    host: string;
+    port: number | null;
+  }>
+>([]);
 
 const allSelected = computed(
   () =>
@@ -168,10 +179,45 @@ async function importSelected() {
   );
   if (toImport.length === 0) return;
 
+  // Pre-populate import review with best available host/port
+  importReviewItems.value = toImport.map((r) => ({
+    resource: r,
+    host: bestHost(r),
+    port: bestPort(r),
+  }));
+  showImportReview.value = true;
+}
+
+function bestHost(r: DiscoveredResource): string {
+  // Prefer external host, fall back to internal
+  return r.external_host || r.host || "";
+}
+
+function bestPort(r: DiscoveredResource): number | null {
+  // If we have an external host, use external port; else internal
+  if (r.external_host) return r.external_port ?? r.port;
+  return r.port;
+}
+
+function cancelImportReview() {
+  showImportReview.value = false;
+  importReviewItems.value = [];
+}
+
+async function confirmImport() {
   importLoading.value = true;
   importMessage.value = null;
+  showImportReview.value = false;
+
+  const resources = importReviewItems.value.map((item) => item.resource);
+  const overrides: ImportOverride[] = importReviewItems.value.map((item) => ({
+    resource_key: item.resource.resource_key,
+    host: item.host,
+    port: item.port,
+  }));
+
   try {
-    const result = await store.importResources(toImport);
+    const result = await store.importResources(resources, overrides);
     importMessage.value = { text: result.message, ok: true };
     selected.value.clear();
   } catch {
@@ -181,6 +227,7 @@ async function importSelected() {
     };
   } finally {
     importLoading.value = false;
+    importReviewItems.value = [];
   }
 }
 
@@ -541,6 +588,155 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- ── Import Review Modal ── -->
+    <div
+      v-if="showImportReview"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      @click.self="cancelImportReview"
+    >
+      <div
+        class="w-full max-w-2xl rounded-xl border border-border bg-surface p-6 shadow-lg max-h-[80vh] flex flex-col"
+      >
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-text-primary">
+            Review Import — {{ importReviewItems.length }} Source{{
+              importReviewItems.length > 1 ? "s" : ""
+            }}
+          </h3>
+          <button
+            class="rounded p-1 text-text-muted hover:bg-surface-raised"
+            @click="cancelImportReview"
+          >
+            <X class="h-5 w-5" />
+          </button>
+        </div>
+
+        <p class="text-sm text-text-muted mb-4">
+          Verify the host and port for each source. Internal cluster addresses
+          (<code>.svc.cluster.local</code>) are not reachable from outside the
+          cluster — update them if Cellar runs externally.
+        </p>
+
+        <div class="flex-1 overflow-y-auto space-y-3">
+          <div
+            v-for="item in importReviewItems"
+            :key="item.resource.resource_key"
+            class="rounded-lg border border-border bg-surface-raised p-3"
+          >
+            <div class="flex items-center gap-2 mb-2">
+              <component
+                :is="sourceIcon(item.resource.source_type)"
+                class="h-4 w-4 text-primary"
+              />
+              <span class="font-medium text-text-primary text-sm">
+                {{ item.resource.name }}
+              </span>
+              <span
+                class="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                :class="kindBadgeClass(item.resource.kind)"
+              >
+                {{ item.resource.kind }}
+              </span>
+              <span class="text-xs text-text-muted">
+                {{ sourceTypeLabel(item.resource.source_type) }}
+              </span>
+              <span
+                v-if="
+                  item.resource.service_type &&
+                  item.resource.service_type !== 'ClusterIP'
+                "
+                class="rounded-full bg-info/10 px-2 py-0.5 text-[10px] font-medium text-info"
+              >
+                {{ item.resource.service_type }}
+              </span>
+            </div>
+
+            <!-- Internal vs external hints -->
+            <div
+              v-if="
+                item.resource.host &&
+                item.resource.host.endsWith('.svc.cluster.local')
+              "
+              class="mb-2 text-xs text-warning"
+            >
+              Internal:
+              <span class="font-mono">
+                {{ item.resource.host }}:{{ item.resource.port }}
+              </span>
+              <span
+                v-if="item.resource.external_host"
+                class="text-success ml-2"
+              >
+                External detected:
+                <span class="font-mono">
+                  {{ item.resource.external_host }}:{{
+                    item.resource.external_port
+                  }}
+                </span>
+              </span>
+              <span
+                v-else-if="item.resource.node_port"
+                class="text-text-muted ml-2"
+              >
+                NodePort: {{ item.resource.node_port }} (set your node IP below)
+              </span>
+            </div>
+
+            <div class="grid grid-cols-[1fr_100px] gap-2">
+              <div>
+                <label class="block text-xs font-medium text-text-muted mb-0.5">
+                  Host
+                </label>
+                <input
+                  v-model="item.host"
+                  type="text"
+                  :placeholder="item.resource.host ?? 'host'"
+                  class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                  :class="{
+                    'border-warning/50':
+                      item.host.endsWith('.svc.cluster.local'),
+                  }"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-text-muted mb-0.5">
+                  Port
+                </label>
+                <input
+                  v-model.number="item.port"
+                  type="number"
+                  :placeholder="String(item.resource.port ?? '')"
+                  class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-4 border-t border-border mt-4">
+          <button
+            class="rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-muted hover:bg-surface-raised transition-colors"
+            @click="cancelImportReview"
+          >
+            Cancel
+          </button>
+          <button
+            :disabled="importLoading"
+            class="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
+            @click="confirmImport"
+          >
+            <Loader2 v-if="importLoading" class="h-4 w-4 animate-spin" />
+            <Import v-else class="h-4 w-4" />
+            {{
+              importLoading
+                ? "Importing…"
+                : `Import ${importReviewItems.length} Source${importReviewItems.length > 1 ? "s" : ""}`
+            }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Import message -->
     <div
       v-if="importMessage"
@@ -688,15 +884,31 @@ onMounted(() => {
               >
                 Already added
               </span>
+              <span
+                v-if="resource.service_type && resource.service_type !== 'ClusterIP'"
+                class="rounded-full bg-info/10 px-2 py-0.5 text-xs font-medium text-info"
+              >
+                {{ resource.service_type }}
+              </span>
             </div>
             <p class="mt-0.5 text-sm text-text-muted truncate">
               <span class="font-mono">{{ resource.namespace }}</span>
-              <span v-if="resource.host" class="ml-2">
-                {{ resource.host
-                }}{{ resource.port ? `:${resource.port}` : "" }}
+              <span v-if="resource.host" class="ml-2 font-mono">
+                {{ resource.host }}{{ resource.port ? `:${resource.port}` : "" }}
               </span>
               <span v-if="resource.capacity" class="ml-2">
                 · {{ resource.capacity }}
+              </span>
+            </p>
+            <p
+              v-if="resource.external_host || resource.node_port"
+              class="mt-0.5 text-xs truncate"
+            >
+              <span v-if="resource.external_host" class="text-success font-mono">
+                External: {{ resource.external_host }}{{ resource.external_port ? `:${resource.external_port}` : "" }}
+              </span>
+              <span v-else-if="resource.node_port" class="text-info font-mono">
+                NodePort: {{ resource.node_port }}
               </span>
             </p>
             <p

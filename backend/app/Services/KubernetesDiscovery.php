@@ -257,6 +257,10 @@ class KubernetesDiscovery
                     'image' => $image,
                     'host' => "{$appName}.{$ns}.svc.cluster.local",
                     'port' => $port ?? $this->defaultPort($sourceType),
+                    'external_host' => null,
+                    'external_port' => null,
+                    'node_port' => null,
+                    'service_type' => null,
                     'labels' => $labels,
                 ];
             }
@@ -282,12 +286,52 @@ class KubernetesDiscovery
             $ns = $svc['metadata']['namespace'] ?? 'default';
             $svcName = $svc['metadata']['name'] ?? '';
             $labels = $svc['metadata']['labels'] ?? [];
+            $svcType = $svc['spec']['type'] ?? 'ClusterIP';
 
             foreach ($svc['spec']['ports'] ?? [] as $portSpec) {
                 $port = $portSpec['port'] ?? 0;
+                $nodePort = $portSpec['nodePort'] ?? null;
 
                 if (isset(self::PORT_MAP[$port])) {
                     $sourceType = self::PORT_MAP[$port];
+
+                    // Determine the best host/port for external access
+                    $internalHost = "{$svcName}.{$ns}.svc.cluster.local";
+                    $externalHost = null;
+                    $externalPort = null;
+
+                    if ($svcType === 'ExternalName') {
+                        $externalHost = $svc['spec']['externalName'] ?? null;
+                        $externalPort = $port;
+                    } elseif ($svcType === 'LoadBalancer') {
+                        // Check for external IP from status
+                        $ingress = $svc['status']['loadBalancer']['ingress'] ?? [];
+                        if (! empty($ingress)) {
+                            $externalHost = $ingress[0]['ip'] ?? $ingress[0]['hostname'] ?? null;
+                            $externalPort = $port;
+                        }
+                        // Fallback to spec.externalIPs
+                        if (! $externalHost) {
+                            $extIPs = $svc['spec']['externalIPs'] ?? [];
+                            if (! empty($extIPs)) {
+                                $externalHost = $extIPs[0];
+                                $externalPort = $port;
+                            }
+                        }
+                    } elseif ($svcType === 'NodePort' && $nodePort) {
+                        $externalPort = $nodePort;
+                        // Node IP needs to come from cluster nodes — use placeholder
+                        $externalHost = null;
+                    }
+
+                    // Also check spec.externalIPs (available on any service type)
+                    if (! $externalHost) {
+                        $extIPs = $svc['spec']['externalIPs'] ?? [];
+                        if (! empty($extIPs)) {
+                            $externalHost = $extIPs[0];
+                            $externalPort = $externalPort ?? $port;
+                        }
+                    }
 
                     $found[] = [
                         'kind' => 'Service',
@@ -295,8 +339,12 @@ class KubernetesDiscovery
                         'name' => $svcName,
                         'source_type' => $sourceType,
                         'image' => null,
-                        'host' => "{$svcName}.{$ns}.svc.cluster.local",
+                        'host' => $internalHost,
                         'port' => $port,
+                        'external_host' => $externalHost,
+                        'external_port' => $externalPort ?? ($nodePort ?? $port),
+                        'node_port' => $nodePort,
+                        'service_type' => $svcType,
                         'labels' => $labels,
                     ];
                 }
