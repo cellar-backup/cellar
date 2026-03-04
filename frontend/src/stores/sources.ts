@@ -35,9 +35,9 @@ export interface QuickAddResult {
   backup_plan: {
     id: string;
     name: string;
-    schedule: string;
-    retention: Record<string, number>;
-    repository: string;
+    schedule_cron: string;
+    retention_policy: Record<string, number>;
+    repository_id: string;
   };
   message: string;
 }
@@ -51,8 +51,8 @@ export const useSourcesStore = defineStore("sources", () => {
     loading.value = true;
     error.value = null;
     try {
-      const { data } = await api.get("/sources/");
-      sources.value = data.data ?? data.results ?? data;
+      const { data } = await api.get("/sources");
+      sources.value = Array.isArray(data) ? data : (data.data ?? data);
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : "Failed to fetch sources";
     } finally {
@@ -61,19 +61,19 @@ export const useSourcesStore = defineStore("sources", () => {
   }
 
   async function quickAdd(payload: QuickAddPayload): Promise<QuickAddResult> {
-    const { data } = await api.post("/sources/quick-add/", payload);
+    const { data } = await api.post("/sources/quick-add", payload);
     // Refresh the list
     await fetchSources();
     return data;
   }
 
   async function testConnection(sourceId: string) {
-    const { data } = await api.post(`/sources/${sourceId}/test-connection/`);
+    const { data } = await api.post(`/sources/${sourceId}/test-connection`);
     return data;
   }
 
   async function deleteSource(sourceId: string) {
-    await api.delete(`/sources/${sourceId}/`);
+    await api.delete(`/sources/${sourceId}`);
     sources.value = sources.value.filter((s) => s.id !== sourceId);
   }
 

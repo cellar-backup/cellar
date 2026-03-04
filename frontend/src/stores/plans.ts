@@ -54,8 +54,8 @@ export const usePlansStore = defineStore("plans", () => {
     loading.value = true;
     error.value = null;
     try {
-      const { data } = await api.get("/plans/");
-      plans.value = data.data ?? data.results ?? data;
+      const { data } = await api.get("/plans");
+      plans.value = Array.isArray(data) ? data : (data.data ?? data);
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : "Failed to fetch plans";
     } finally {
@@ -65,8 +65,8 @@ export const usePlansStore = defineStore("plans", () => {
 
   async function fetchJobs() {
     try {
-      const { data } = await api.get("/jobs/");
-      jobs.value = data.data ?? data.results ?? data;
+      const { data } = await api.get("/jobs");
+      jobs.value = Array.isArray(data) ? data : (data.data ?? data);
     } catch {
       /* silent */
     }
@@ -74,25 +74,25 @@ export const usePlansStore = defineStore("plans", () => {
 
   async function fetchArchives() {
     try {
-      const { data } = await api.get("/archives/");
-      archives.value = data.data ?? data.results ?? data;
+      const { data } = await api.get("/archives");
+      archives.value = Array.isArray(data) ? data : (data.data ?? data);
     } catch {
       /* silent */
     }
   }
 
   async function triggerBackup(planId: string) {
-    const { data } = await api.post(`/plans/${planId}/backup/`);
+    const { data } = await api.post(`/plans/${planId}/backup`);
     return data;
   }
 
   async function triggerPrune(planId: string) {
-    const { data } = await api.post(`/plans/${planId}/prune/`);
+    const { data } = await api.post(`/plans/${planId}/prune`);
     return data;
   }
 
   async function triggerVerify(planId: string) {
-    const { data } = await api.post(`/plans/${planId}/verify/`);
+    const { data } = await api.post(`/plans/${planId}/verify`);
     return data;
   }
 

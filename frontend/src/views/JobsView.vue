@@ -11,7 +11,7 @@ onMounted(() => {
 
 function statusIcon(status: string) {
   switch (status) {
-    case "completed":
+    case "success":
       return CircleCheck;
     case "failed":
       return CircleX;
@@ -22,7 +22,7 @@ function statusIcon(status: string) {
 
 function statusClass(status: string) {
   switch (status) {
-    case "completed":
+    case "success":
       return "text-success";
     case "failed":
       return "text-danger";
@@ -35,7 +35,7 @@ function statusClass(status: string) {
 
 function badgeClass(status: string) {
   switch (status) {
-    case "completed":
+    case "success":
       return "bg-success/10 text-success";
     case "failed":
       return "bg-danger/10 text-danger";

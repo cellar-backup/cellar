@@ -97,7 +97,10 @@ async function testConnection(sourceId: string) {
   testing.value = sourceId;
   try {
     const result = await store.testConnection(sourceId);
-    testResults.value[sourceId] = result;
+    testResults.value[sourceId] = {
+      ok: result.status === "ok",
+      detail: result.message,
+    };
   } catch {
     testResults.value[sourceId] = {
       ok: false,
