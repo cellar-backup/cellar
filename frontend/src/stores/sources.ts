@@ -12,6 +12,7 @@ export interface Source {
   database_name: string;
   path: string;
   enabled: boolean;
+  notes: string;
   display_label: string;
   is_database: boolean;
   created_at: string;
@@ -67,6 +68,24 @@ export const useSourcesStore = defineStore("sources", () => {
     return data;
   }
 
+  async function getSource(sourceId: string): Promise<Source> {
+    const { data } = await api.get(`/sources/${sourceId}`);
+    return data;
+  }
+
+  async function updateSource(
+    sourceId: string,
+    payload: Record<string, unknown>,
+  ): Promise<Source> {
+    const { data } = await api.put(`/sources/${sourceId}`, payload);
+    // Update local list if present
+    const idx = sources.value.findIndex((s) => s.id === sourceId);
+    if (idx !== -1) {
+      sources.value[idx] = { ...sources.value[idx], ...data };
+    }
+    return data;
+  }
+
   async function testConnection(sourceId: string) {
     const { data } = await api.post(`/sources/${sourceId}/test-connection`);
     return data;
@@ -83,6 +102,8 @@ export const useSourcesStore = defineStore("sources", () => {
     error,
     fetchSources,
     quickAdd,
+    getSource,
+    updateSource,
     testConnection,
     deleteSource,
   };

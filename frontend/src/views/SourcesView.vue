@@ -7,8 +7,12 @@ import {
   CircleX,
   Loader2,
   Trash2,
+  Pencil,
 } from "lucide-vue-next";
+import { useRouter } from "vue-router";
 import { useSourcesStore, type QuickAddPayload } from "@/stores/sources";
+
+const router = useRouter();
 
 const DB_TYPES = [
   { value: "postgresql", label: "PostgreSQL", defaultPort: 5432 },
@@ -173,7 +177,8 @@ function sourceIcon(type: string) {
       <div
         v-for="source in store.sources"
         :key="source.id"
-        class="flex items-center justify-between rounded-xl border border-border bg-surface p-4 hover:border-primary/30 transition-colors"
+        class="flex items-center justify-between rounded-xl border border-border bg-surface p-4 hover:border-primary/30 transition-colors cursor-pointer"
+        @click="router.push(`/sources/${source.id}`)"
       >
         <div class="flex items-center gap-4">
           <div
@@ -208,7 +213,7 @@ function sourceIcon(type: string) {
             v-if="source.is_database"
             :disabled="testing === source.id"
             class="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-raised transition-colors disabled:opacity-50"
-            @click="testConnection(source.id)"
+            @click.stop="testConnection(source.id)"
           >
             <Loader2
               v-if="testing === source.id"
@@ -218,8 +223,16 @@ function sourceIcon(type: string) {
           </button>
 
           <button
+            class="rounded-lg p-1.5 text-text-muted hover:bg-surface-raised hover:text-text-primary transition-colors"
+            title="Edit source"
+            @click.stop="router.push(`/sources/${source.id}`)"
+          >
+            <Pencil class="h-4 w-4" />
+          </button>
+
+          <button
             class="rounded-lg p-1.5 text-text-muted hover:bg-danger/10 hover:text-danger transition-colors"
-            @click="deleteSource(source.id, source.name)"
+            @click.stop="deleteSource(source.id, source.name)"
           >
             <Trash2 class="h-4 w-4" />
           </button>
