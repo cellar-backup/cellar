@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\BackupPlan;
 use App\Models\RadarCluster;
 use App\Models\RadarIgnore;
+use App\Models\Repository;
 use App\Models\Source;
 use App\Services\DatabaseInspector;
 use App\Services\KubernetesDiscovery;
@@ -263,6 +265,17 @@ class KubernetesController extends Controller
             'resources.*.database_name' => 'nullable|string|max:255',
         ]);
 
+        // Ensure a default repository exists for backup plans
+        $repo = Repository::where('is_default', true)->first();
+        if (! $repo) {
+            $repo = Repository::create([
+                'name' => 'Default Local',
+                'backend_type' => 'local',
+                'is_default' => true,
+                'config' => ['path' => '/data/repositories'],
+            ]);
+        }
+
         $created = [];
 
         foreach ($data['resources'] as $r) {
@@ -283,12 +296,21 @@ class KubernetesController extends Controller
                 'enabled' => true,
             ]);
 
+            // Create a backup plan for each source (schedule disabled by default)
+            BackupPlan::create([
+                'name' => 'Backup: '.$sourceName,
+                'source_id' => $source->id,
+                'repository_id' => $repo->id,
+                'schedule_cron' => '0 2 * * *',
+                'schedule_enabled' => false,
+            ]);
+
             $created[] = $source;
         }
 
         return response()->json([
             'status' => 'ok',
-            'message' => count($created).' sources created from Kubernetes discovery.',
+            'message' => count($created).' sources and backup plans created from Kubernetes discovery.',
             'sources' => $created,
         ], 201);
     }
