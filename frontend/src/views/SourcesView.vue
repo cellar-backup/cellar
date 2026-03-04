@@ -10,10 +10,7 @@ import {
   Pencil,
   Save,
 } from "lucide-vue-next";
-import {
-  useSourcesStore,
-  type QuickAddPayload,
-} from "@/stores/sources";
+import { useSourcesStore, type QuickAddPayload } from "@/stores/sources";
 
 const DB_TYPES = [
   { value: "postgresql", label: "PostgreSQL", defaultPort: 5432 },

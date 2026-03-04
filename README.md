@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/public/logo.svg" alt="Cellar" width="80" />
+  <img src="logo.svg" alt="Cellar" width="80" />
 </p>
 
 <h1 align="center">Cellar</h1>
@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/your-org/cellar/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/your-org/cellar/ci.yml?branch=main&style=flat-square" alt="CI" /></a>
+  <a href="https://github.com/borger/cellar/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/borger/cellar/ci.yml?branch=main&style=flat-square" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="License" /></a>
-  <a href="https://github.com/your-org/cellar/releases"><img src="https://img.shields.io/github/v/release/your-org/cellar?style=flat-square&color=6C5CE7" alt="Release" /></a>
-  <a href="https://hub.docker.com/r/your-org/cellar"><img src="https://img.shields.io/docker/pulls/your-org/cellar?style=flat-square" alt="Docker Pulls" /></a>
+  <a href="https://github.com/borger/cellar/releases"><img src="https://img.shields.io/github/v/release/borger/cellar?style=flat-square&color=6C5CE7" alt="Release" /></a>
+  <a href="https://hub.docker.com/r/borger/cellar"><img src="https://img.shields.io/docker/pulls/borger/cellar?style=flat-square" alt="Docker Pulls" /></a>
 </p>
 
 <p align="center">
@@ -36,14 +36,14 @@ Existing backup tools force you to choose between **power** (borgmatic, restic C
 
 ```bash
 # Clone the repo
-git clone https://github.com/your-org/cellar.git
+git clone https://github.com/borger/cellar.git
 cd cellar
 
 # Launch (that's it — zero config required)
 docker compose up -d
 
 # Open http://localhost:8420
-# Default credentials: admin / admin
+# Default credentials: admin / changeme
 ```
 
 ## Architecture
@@ -70,14 +70,12 @@ cellar/
 │   │   ├── Http/         # Controllers, middleware
 │   │   ├── Jobs/         # Queue jobs (backup, restore, prune, verify)
 │   │   ├── Models/       # Eloquent models
-│   │   └── Services/     # Backup engines (Borg, Restic), DB dumper
+│   │   └── Services/     # Backup engines (Borg), DB dumper/restorer
 │   ├── config/           # Laravel + Cellar + Horizon config
 │   ├── database/         # Migrations
 │   └── routes/           # API routes, scheduler definitions
 ├── frontend/         # Vue 3 SPA — UI components, stores, views
-├── documents/        # Built-in Custom Backup Document templates
-├── docker/           # Dockerfiles, Caddy config, entrypoint
-└── docs/             # VitePress documentation site
+└── docker/           # Dockerfiles, Caddy config, entrypoint
 ```
 
 ## Development
