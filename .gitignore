@@ -37,6 +37,9 @@ docker-compose.override.yml
 !.env.example
 !backend/.env.docker
 
+# ----- AI tools -----
+CLAUDE.md
+
 # ----- IDE / Editor -----
 .vscode/*
 !.vscode/settings.json
