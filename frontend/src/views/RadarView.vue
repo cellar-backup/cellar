@@ -264,8 +264,8 @@ function switchReviewEndpoint(
   if (ep) {
     item.host = ep.external_host || ep.host || "";
     item.port = ep.external_host
-      ? ep.external_port ?? ep.port
-      : ep.port ?? null;
+      ? (ep.external_port ?? ep.port)
+      : (ep.port ?? null);
   }
 }
 
@@ -709,7 +709,9 @@ onMounted(() => {
 
             <!-- Endpoint selector (when multiple) -->
             <div
-              v-if="item.resource.endpoints && item.resource.endpoints.length > 1"
+              v-if="
+                item.resource.endpoints && item.resource.endpoints.length > 1
+              "
               class="mb-3"
             >
               <label class="block text-xs font-medium text-text-muted mb-1.5">
@@ -822,7 +824,10 @@ onMounted(() => {
 
             <!-- Secrets hint -->
             <div
-              v-if="item.resource.credentials && item.resource.credentials.length > 0"
+              v-if="
+                item.resource.credentials &&
+                item.resource.credentials.length > 0
+              "
               class="mt-2 flex items-center gap-1.5 text-xs text-text-muted"
             >
               <KeyRound class="h-3 w-3 text-success" />

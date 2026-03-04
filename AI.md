@@ -565,11 +565,12 @@ Key features:
 - **Image detection** — maps container images to source types (e.g., `postgres:16` → `postgresql`, `redis:7` → `redis`)
 - **Port detection** — known DB ports (5432, 3306, 27017, 6379) trigger source type classification
 - **Pod scanning** — inspects all pods for database containers
-- **Service scanning** — inspects service ports for database endpoints
+- **Service scanning** — inspects service ports for database endpoints; uses `app.kubernetes.io/name` or `app` labels (and selector) to resolve the canonical app name so that multiple services (ClusterIP, LoadBalancer, etc.) for the same database group together
 - **PVC scanning** — lists bound PersistentVolumeClaims as potential directory backup targets
 - **External access detection** — for services, detects NodePort, LoadBalancer (ingress IP/hostname), ExternalName, and `spec.externalIPs`. Returns `external_host`, `external_port`, `node_port`, `service_type` alongside internal host/port so the UI can suggest reachable endpoints.
-- **Deduplication & grouping** — groups Pod + Service entries for the same database (`namespace:name:source_type` key) into a single resource with an `endpoints[]` array. Service endpoints sort first. Top-level fields prefer Service. The UI shows a clickable kind toggle (Pod/Service) per grouped resource.
-- Returns discovered resources with host, port, namespace, kind, image, external access fields, and `endpoints[]` array
+- **Secret credential discovery** — scans Opaque secrets for known credential keys (password, username, database variants for MariaDB/MySQL/PostgreSQL/MongoDB/Redis). Matches secrets to discovered resources via `app.kubernetes.io/name` label. Returns `credentials[]` array per resource with `{secret_name, key, value}`.
+- **Deduplication & grouping** — groups Pod + Service entries for the same database (`namespace:canonicalName:source_type` key) into a single resource with an `endpoints[]` array. Each endpoint carries `resource_name` (actual K8s resource name). Service endpoints sort first. Top-level fields prefer Service.
+- Returns discovered resources with host, port, namespace, kind, image, external access fields, `endpoints[]` array, and `credentials[]` array
 - Factory method: `fromCluster(RadarCluster)` — creates instance from a saved cluster, writing kubeconfig content to a temp file (cleaned up in `__destruct`)
 
 ---
@@ -712,7 +713,7 @@ Auth guard: on first load validates token via `GET /auth/me`; subsequent navigat
 
 **`sources.ts`** — Manages Source[]. Methods: `fetchSources()`, `quickAdd(payload)`, `getSource(id)`, `updateSource(id, payload)`, `testConnection(id)`, `deleteSource(id)`.
 
-**`radar.ts`** — Manages multi-cluster K8s Radar state. Types: `ResourceEndpoint` (kind, host, port, external fields, image), `DiscoveredResource` (includes `endpoints[]` array for grouped Pod/Service), `ImportOverride` (per-resource host/port overrides). Tracks saved clusters, active cluster selection, discovered resources, ignored list. Cluster CRUD: `fetchClusters()`, `createCluster(name, kubeconfigFile?, context?, defaultNamespace?)`, `updateCluster(...)`, `deleteCluster(id)`, `selectCluster(id)`. Discovery (cluster-scoped): `testConnection()`, `discover()`, `importResources(selected, overrides?)`, `ignoreResource(resource, reason?)`, `fetchIgnored()`, `unignore(id)`. Uses `FormData` with multipart upload for kubeconfig files.
+**`radar.ts`** — Manages multi-cluster K8s Radar state. Types: `ResourceEndpoint` (kind, resource_name, host, port, external fields, image), `DiscoveredCredential` (secret_name, key, value), `DiscoveredResource` (includes `endpoints[]` and `credentials[]`), `ImportOverride` (per-resource host/port/username/password/database_name overrides). Tracks saved clusters, active cluster selection, discovered resources, ignored list. Cluster CRUD: `fetchClusters()`, `createCluster(name, kubeconfigFile?, context?, defaultNamespace?)`, `updateCluster(...)`, `deleteCluster(id)`, `selectCluster(id)`. Discovery (cluster-scoped): `testConnection()`, `discover()`, `importResources(selected, overrides?)`, `ignoreResource(resource, reason?)`, `fetchIgnored()`, `unignore(id)`. Uses `FormData` with multipart upload for kubeconfig files.
 
 ### Views (9 files)
 
@@ -722,7 +723,7 @@ Auth guard: on first load validates token via `GET /auth/me`; subsequent navigat
 
 - **SourcesView** — Wizard supports two categories: Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis) and Filesystem (Directory, Docker Volume). Step 2 form fields adapt based on category.
 - **PlansView** — Includes "Import Borg Repo" modal for importing existing Borg repositories into Cellar.
-- **RadarView** — Multi-cluster K8s discovery UI: cluster selector bar with add/edit/delete, kubeconfig file upload modal, per-cluster scan with namespace filter, scan results as selectable list with Pod/Service endpoint toggle (clickable kind badges when both exist), external access badges and hints, import review modal with editable host/port per resource (auto-prefers external endpoints), bulk import, per-resource ignore with "Ignored" panel toggle.
+- **RadarView** — Multi-cluster K8s discovery UI: cluster selector bar with add/edit/delete, kubeconfig file upload modal, per-cluster scan with namespace filter, scan results as selectable list with Pod/Service endpoint toggle (clickable kind badges when multiple exist), external access badges and hints, Secret credential badge. Import review modal with endpoint selector (shows each endpoint's K8s resource name + type), editable host/port, auto-filled username/password/database from discovered Secrets. Bulk import, per-resource ignore with "Ignored" panel toggle.
 
 ---
 
