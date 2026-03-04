@@ -96,6 +96,32 @@ export const usePlansStore = defineStore("plans", () => {
     return data;
   }
 
+  async function triggerRestore(archiveId: string) {
+    const { data } = await api.post(`/archives/${archiveId}/restore`);
+    return data;
+  }
+
+  async function downloadArchive(archiveId: string) {
+    const response = await api.get(`/archives/${archiveId}/download`, {
+      responseType: "blob",
+    });
+
+    // Extract filename from Content-Disposition header or fallback
+    const disposition = response.headers["content-disposition"] ?? "";
+    const match = disposition.match(/filename="?([^";\n]+)"?/);
+    const filename = match?.[1] ?? `archive-${archiveId}.dump`;
+
+    // Create a temporary download link
+    const url = URL.createObjectURL(response.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   return {
     plans,
     jobs,
@@ -108,5 +134,7 @@ export const usePlansStore = defineStore("plans", () => {
     triggerBackup,
     triggerPrune,
     triggerVerify,
+    triggerRestore,
+    downloadArchive,
   };
 });

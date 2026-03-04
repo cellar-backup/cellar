@@ -121,8 +121,23 @@ class BorgEngine implements BackupEngine
         $args = ['extract', "{$repoPath}::{$archiveId}"];
         $args = array_merge($args, $includePatterns);
 
+        $cmd = array_merge([$this->borgPath], $args);
+
         $start = microtime(true);
-        $this->run($args, $repoPath);
+
+        // borg extract writes to the current working directory,
+        // so we use Process::path() to set it to our target path.
+        $result = Process::timeout(3600)
+            ->env($this->env($repoPath))
+            ->path($targetPath)
+            ->run($cmd);
+
+        if ($result->exitCode() >= 2) {
+            throw new BorgError(
+                "Borg extract failed (exit {$result->exitCode()}): {$result->errorOutput()}"
+            );
+        }
+
         $duration = microtime(true) - $start;
 
         return new RestoreResult(

@@ -21,8 +21,8 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        // Allow login by username (maps to "name" field) or email.
-        $user = User::where('name', $request->username)
+        // Allow login by username or email.
+        $user = User::where('username', $request->username)
             ->orWhere('email', $request->username)
             ->first();
 

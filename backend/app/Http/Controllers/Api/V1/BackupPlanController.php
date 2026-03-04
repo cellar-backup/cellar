@@ -110,11 +110,10 @@ class BackupPlanController extends Controller
     public function restore(Request $request, BackupPlan $plan): JsonResponse
     {
         $data = $request->validate([
-            'archive_id' => 'required|string',
-            'target_path' => 'required|string',
+            'archive_id' => 'required|string|exists:archives,id',
         ]);
 
-        RunRestore::dispatch($plan->id, $data['archive_id'], $data['target_path']);
+        RunRestore::dispatch($data['archive_id']);
 
         return response()->json([
             'detail' => 'Restore job queued.',

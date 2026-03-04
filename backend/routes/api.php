@@ -56,10 +56,12 @@ Route::prefix('v1')->group(function () {
         Route::get('jobs', [JobController::class, 'index']);
         Route::get('jobs/{job}', [JobController::class, 'show']);
 
-        // Archives (read + delete)
+        // Archives
         Route::get('archives', [ArchiveController::class, 'index']);
         Route::get('archives/{archive}', [ArchiveController::class, 'show']);
         Route::delete('archives/{archive}', [ArchiveController::class, 'destroy']);
+        Route::post('archives/{archive}/restore', [ArchiveController::class, 'restore']);
+        Route::get('archives/{archive}/download', [ArchiveController::class, 'download']);
 
         // Notifications
         Route::apiResource('notifications', NotificationChannelController::class);
