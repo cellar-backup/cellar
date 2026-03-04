@@ -191,18 +191,54 @@ class KubernetesDiscovery
             $this->discoverPVCs($namespace),
         );
 
-        // Deduplicate by a composite key (namespace + name + type)
-        $seen = [];
-        $unique = [];
+        // Group by composite key and merge Pod + Service into one entry
+        $groups = [];
         foreach ($resources as $r) {
             $key = "{$r['namespace']}:{$r['name']}:{$r['source_type']}";
-            if (! isset($seen[$key])) {
-                $seen[$key] = true;
-                $unique[] = $r;
+
+            $endpoint = [
+                'kind' => $r['kind'],
+                'host' => $r['host'] ?? null,
+                'port' => $r['port'] ?? null,
+                'external_host' => $r['external_host'] ?? null,
+                'external_port' => $r['external_port'] ?? null,
+                'node_port' => $r['node_port'] ?? null,
+                'service_type' => $r['service_type'] ?? null,
+                'image' => $r['image'] ?? null,
+            ];
+
+            if (! isset($groups[$key])) {
+                $groups[$key] = $r;
+                $groups[$key]['endpoints'] = [$endpoint];
+            } else {
+                $groups[$key]['endpoints'][] = $endpoint;
+
+                // Prefer Service over Pod for top-level fields
+                if ($r['kind'] === 'Service' && $groups[$key]['kind'] === 'Pod') {
+                    $groups[$key]['kind'] = $r['kind'];
+                    $groups[$key]['host'] = $r['host'];
+                    $groups[$key]['port'] = $r['port'];
+                    $groups[$key]['external_host'] = $r['external_host'] ?? null;
+                    $groups[$key]['external_port'] = $r['external_port'] ?? null;
+                    $groups[$key]['node_port'] = $r['node_port'] ?? null;
+                    $groups[$key]['service_type'] = $r['service_type'] ?? null;
+                }
+
+                // Keep image from whichever has it (usually Pod)
+                if (empty($groups[$key]['image']) && ! empty($r['image'])) {
+                    $groups[$key]['image'] = $r['image'];
+                }
             }
         }
 
-        return $unique;
+        // Sort endpoints: Service first, then Pod, then PVC
+        $kindOrder = ['Service' => 0, 'Pod' => 1, 'PVC' => 2];
+        foreach ($groups as &$g) {
+            usort($g['endpoints'], fn ($a, $b) => ($kindOrder[$a['kind']] ?? 9) <=> ($kindOrder[$b['kind']] ?? 9));
+        }
+        unset($g);
+
+        return array_values($groups);
     }
 
     // ── Scanners ───────────────────────────────────────────────

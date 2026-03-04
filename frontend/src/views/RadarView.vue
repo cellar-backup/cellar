@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from "vue";
 import {
   useRadarStore,
   type DiscoveredResource,
+  type ResourceEndpoint,
   type RadarCluster,
   type ImportOverride,
 } from "@/stores/radar";
@@ -56,6 +57,26 @@ const importReviewItems = ref<
     port: number | null;
   }>
 >([]);
+
+// ── Endpoint selection (for Pod/Service toggle) ──
+const selectedEndpoints = ref<Record<string, number>>({});
+
+function activeEndpoint(r: DiscoveredResource): ResourceEndpoint {
+  const idx = selectedEndpoints.value[r.resource_key] ?? 0;
+  return (
+    r.endpoints?.[idx] ??
+    r.endpoints?.[0] ?? {
+      kind: r.kind,
+      host: r.host,
+      port: r.port,
+      external_host: r.external_host,
+      external_port: r.external_port,
+      node_port: r.node_port,
+      service_type: r.service_type,
+      image: r.image,
+    }
+  );
+}
 
 const allSelected = computed(
   () =>
@@ -167,6 +188,7 @@ async function confirmDeleteCluster(cluster: RadarCluster) {
 async function runScan() {
   importMessage.value = null;
   selected.value.clear();
+  selectedEndpoints.value = {};
   const ok = await store.testConnection();
   if (ok) {
     await store.discover();
@@ -189,14 +211,14 @@ async function importSelected() {
 }
 
 function bestHost(r: DiscoveredResource): string {
-  // Prefer external host, fall back to internal
-  return r.external_host || r.host || "";
+  const ep = activeEndpoint(r);
+  return ep.external_host || ep.host || r.host || "";
 }
 
 function bestPort(r: DiscoveredResource): number | null {
-  // If we have an external host, use external port; else internal
-  if (r.external_host) return r.external_port ?? r.port;
-  return r.port;
+  const ep = activeEndpoint(r);
+  if (ep.external_host) return ep.external_port ?? ep.port;
+  return ep.port ?? r.port;
 }
 
 function cancelImportReview() {
@@ -872,7 +894,26 @@ onMounted(() => {
               <h3 class="font-medium text-text-primary truncate">
                 {{ resource.name }}
               </h3>
+              <!-- Endpoint toggle (clickable when multiple) -->
+              <template
+                v-if="resource.endpoints && resource.endpoints.length > 1"
+              >
+                <button
+                  v-for="(ep, idx) in resource.endpoints"
+                  :key="ep.kind"
+                  class="rounded-full px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer"
+                  :class="
+                    (selectedEndpoints[resource.resource_key] ?? 0) === idx
+                      ? kindBadgeClass(ep.kind)
+                      : 'bg-surface-raised text-text-muted hover:opacity-80'
+                  "
+                  @click.stop="selectedEndpoints[resource.resource_key] = idx"
+                >
+                  {{ ep.kind }}
+                </button>
+              </template>
               <span
+                v-else
                 class="rounded-full px-2 py-0.5 text-xs font-medium"
                 :class="kindBadgeClass(resource.kind)"
               >
@@ -885,37 +926,59 @@ onMounted(() => {
                 Already added
               </span>
               <span
-                v-if="resource.service_type && resource.service_type !== 'ClusterIP'"
+                v-if="
+                  activeEndpoint(resource).service_type &&
+                  activeEndpoint(resource).service_type !== 'ClusterIP'
+                "
                 class="rounded-full bg-info/10 px-2 py-0.5 text-xs font-medium text-info"
               >
-                {{ resource.service_type }}
+                {{ activeEndpoint(resource).service_type }}
               </span>
             </div>
             <p class="mt-0.5 text-sm text-text-muted truncate">
               <span class="font-mono">{{ resource.namespace }}</span>
-              <span v-if="resource.host" class="ml-2 font-mono">
-                {{ resource.host }}{{ resource.port ? `:${resource.port}` : "" }}
+              <span v-if="activeEndpoint(resource).host" class="ml-2 font-mono">
+                {{ activeEndpoint(resource).host
+                }}{{
+                  activeEndpoint(resource).port
+                    ? `:${activeEndpoint(resource).port}`
+                    : ""
+                }}
               </span>
               <span v-if="resource.capacity" class="ml-2">
                 · {{ resource.capacity }}
               </span>
             </p>
             <p
-              v-if="resource.external_host || resource.node_port"
+              v-if="
+                activeEndpoint(resource).external_host ||
+                activeEndpoint(resource).node_port
+              "
               class="mt-0.5 text-xs truncate"
             >
-              <span v-if="resource.external_host" class="text-success font-mono">
-                External: {{ resource.external_host }}{{ resource.external_port ? `:${resource.external_port}` : "" }}
+              <span
+                v-if="activeEndpoint(resource).external_host"
+                class="text-success font-mono"
+              >
+                External: {{ activeEndpoint(resource).external_host
+                }}{{
+                  activeEndpoint(resource).external_port
+                    ? `:${activeEndpoint(resource).external_port}`
+                    : ""
+                }}
               </span>
-              <span v-else-if="resource.node_port" class="text-info font-mono">
-                NodePort: {{ resource.node_port }}
+              <span
+                v-else-if="activeEndpoint(resource).node_port"
+                class="text-info font-mono"
+              >
+                NodePort: {{ activeEndpoint(resource).node_port }}
               </span>
             </p>
             <p
-              v-if="resource.image"
+              v-if="resource.image || activeEndpoint(resource).image"
               class="mt-0.5 text-xs text-text-muted truncate"
             >
-              {{ resource.image }}
+              {{ resource.image || activeEndpoint(resource).image }}
             </p>
           </div>
 

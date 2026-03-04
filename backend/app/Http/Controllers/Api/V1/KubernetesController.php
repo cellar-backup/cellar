@@ -203,9 +203,15 @@ class KubernetesController extends Controller
             }
 
             $r['already_added'] = false;
-            $host = strtolower($r['host'] ?? '');
-            if ($host && in_array($host, $existingHosts)) {
-                $r['already_added'] = true;
+            $hostsToCheck = [strtolower($r['host'] ?? '')];
+            foreach ($r['endpoints'] ?? [] as $ep) {
+                $hostsToCheck[] = strtolower($ep['host'] ?? '');
+            }
+            foreach ($hostsToCheck as $h) {
+                if ($h && in_array($h, $existingHosts)) {
+                    $r['already_added'] = true;
+                    break;
+                }
             }
 
             $r['resource_key'] = $key;

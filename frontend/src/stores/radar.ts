@@ -13,6 +13,17 @@ export interface RadarCluster {
   created_at: string;
 }
 
+export interface ResourceEndpoint {
+  kind: string;
+  host: string | null;
+  port: number | null;
+  external_host: string | null;
+  external_port: number | null;
+  node_port: number | null;
+  service_type: string | null;
+  image: string | null;
+}
+
 export interface DiscoveredResource {
   kind: string;
   namespace: string;
@@ -25,6 +36,7 @@ export interface DiscoveredResource {
   external_port: number | null;
   node_port: number | null;
   service_type: string | null;
+  endpoints: ResourceEndpoint[];
   capacity?: string;
   labels: Record<string, string>;
   already_added: boolean;
