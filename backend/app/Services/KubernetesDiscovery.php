@@ -191,6 +191,9 @@ class KubernetesDiscovery
             $this->discoverPVCs($namespace),
         );
 
+        // 4. Discover credentials from Secrets
+        $secrets = $this->discoverSecrets($namespace);
+
         // Group by composite key and merge Pod + Service into one entry
         $groups = [];
         foreach ($resources as $r) {
@@ -198,6 +201,7 @@ class KubernetesDiscovery
 
             $endpoint = [
                 'kind' => $r['kind'],
+                'resource_name' => $r['resource_name'] ?? $r['name'],
                 'host' => $r['host'] ?? null,
                 'port' => $r['port'] ?? null,
                 'external_host' => $r['external_host'] ?? null,
@@ -211,7 +215,17 @@ class KubernetesDiscovery
                 $groups[$key] = $r;
                 $groups[$key]['endpoints'] = [$endpoint];
             } else {
-                $groups[$key]['endpoints'][] = $endpoint;
+                // Avoid duplicate endpoints (same kind + same resource_name)
+                $isDuplicate = false;
+                foreach ($groups[$key]['endpoints'] as $existing) {
+                    if ($existing['kind'] === $endpoint['kind'] && $existing['resource_name'] === $endpoint['resource_name']) {
+                        $isDuplicate = true;
+                        break;
+                    }
+                }
+                if (! $isDuplicate) {
+                    $groups[$key]['endpoints'][] = $endpoint;
+                }
 
                 // Prefer Service over Pod for top-level fields
                 if ($r['kind'] === 'Service' && $groups[$key]['kind'] === 'Pod') {
@@ -228,6 +242,9 @@ class KubernetesDiscovery
                 if (empty($groups[$key]['image']) && ! empty($r['image'])) {
                     $groups[$key]['image'] = $r['image'];
                 }
+
+                // Merge labels
+                $groups[$key]['labels'] = array_merge($groups[$key]['labels'] ?? [], $r['labels'] ?? []);
             }
         }
 
@@ -235,6 +252,11 @@ class KubernetesDiscovery
         $kindOrder = ['Service' => 0, 'Pod' => 1, 'PVC' => 2];
         foreach ($groups as &$g) {
             usort($g['endpoints'], fn ($a, $b) => ($kindOrder[$a['kind']] ?? 9) <=> ($kindOrder[$b['kind']] ?? 9));
+
+            // Attach discovered credentials
+            $ns = $g['namespace'];
+            $appName = $g['name'];
+            $g['credentials'] = $secrets["{$ns}:{$appName}"] ?? [];
         }
         unset($g);
 
@@ -288,6 +310,7 @@ class KubernetesDiscovery
                     'kind' => 'Pod',
                     'namespace' => $ns,
                     'name' => $appName,
+                    'resource_name' => $podName,
                     'pod_name' => $podName,
                     'source_type' => $sourceType,
                     'image' => $image,
@@ -322,7 +345,16 @@ class KubernetesDiscovery
             $ns = $svc['metadata']['namespace'] ?? 'default';
             $svcName = $svc['metadata']['name'] ?? '';
             $labels = $svc['metadata']['labels'] ?? [];
+            $selector = $svc['spec']['selector'] ?? [];
             $svcType = $svc['spec']['type'] ?? 'ClusterIP';
+
+            // Use app labels for canonical name (same logic as pods) so
+            // services and pods for the same app group together.
+            $canonicalName = $labels['app.kubernetes.io/name']
+                ?? $labels['app']
+                ?? $selector['app.kubernetes.io/name']
+                ?? $selector['app']
+                ?? $svcName;
 
             foreach ($svc['spec']['ports'] ?? [] as $portSpec) {
                 $port = $portSpec['port'] ?? 0;
@@ -372,7 +404,8 @@ class KubernetesDiscovery
                     $found[] = [
                         'kind' => 'Service',
                         'namespace' => $ns,
-                        'name' => $svcName,
+                        'name' => $canonicalName,
+                        'resource_name' => $svcName,
                         'source_type' => $sourceType,
                         'image' => null,
                         'host' => $internalHost,
@@ -418,6 +451,7 @@ class KubernetesDiscovery
                 'kind' => 'PVC',
                 'namespace' => $ns,
                 'name' => $pvcName,
+                'resource_name' => $pvcName,
                 'source_type' => 'directory',
                 'image' => null,
                 'host' => null,
@@ -428,6 +462,99 @@ class KubernetesDiscovery
         }
 
         return $found;
+    }
+
+    // ── Secret scanner ──────────────────────────────────────────
+
+    /** Well-known secret data keys that hold DB credentials */
+    private const CREDENTIAL_KEYS = [
+        // Passwords
+        'password', 'db-password', 'database-password',
+        'mariadb-password', 'mariadb-root-password',
+        'mysql-password', 'mysql-root-password',
+        'postgres-password', 'postgresql-password',
+        'mongodb-password', 'mongodb-root-password',
+        'redis-password',
+        // Usernames
+        'username', 'db-username', 'database-username',
+        'mariadb-user', 'mysql-user', 'postgres-user', 'mongodb-user',
+        'user',
+        // Database name
+        'database', 'database-name', 'db-name', 'dbname',
+        'mariadb-database', 'mysql-database', 'postgres-db', 'mongodb-database',
+        // Connection strings (for display / reference)
+        'uri', 'dsn', 'database-url', 'connection-string',
+    ];
+
+    /**
+     * Discover database credentials from K8s Secrets.
+     *
+     * Returns a map keyed by "namespace:appName" with arrays of
+     * [{secret_name, key, value},...] for known credential keys.
+     */
+    private function discoverSecrets(?string $namespace = null): array
+    {
+        $args = ['get', 'secrets'];
+        if ($namespace) {
+            $args[] = '-n';
+            $args[] = $namespace;
+        } else {
+            $args[] = '--all-namespaces';
+        }
+
+        try {
+            $data = $this->kubectl($args);
+        } catch (\Throwable) {
+            // Secrets might be RBAC-restricted — silently skip
+            return [];
+        }
+
+        $result = []; // keyed by "ns:appName"
+
+        foreach ($data['items'] ?? [] as $secret) {
+            $type = $secret['type'] ?? '';
+            // Only inspect Opaque secrets (where credentials live)
+            if ($type !== 'Opaque') {
+                continue;
+            }
+
+            $ns = $secret['metadata']['namespace'] ?? 'default';
+            $secretName = $secret['metadata']['name'] ?? '';
+            $labels = $secret['metadata']['labels'] ?? [];
+            $secretData = $secret['data'] ?? [];
+
+            if (empty($secretData)) {
+                continue;
+            }
+
+            // Determine which app this secret belongs to
+            $appName = $labels['app.kubernetes.io/name']
+                ?? $labels['app']
+                ?? null;
+
+            if (! $appName) {
+                continue; // Can't associate with a discovered resource
+            }
+
+            $mapKey = "{$ns}:{$appName}";
+
+            foreach ($secretData as $key => $base64Value) {
+                $keyLower = strtolower($key);
+                if (in_array($keyLower, self::CREDENTIAL_KEYS, true)) {
+                    $decoded = base64_decode($base64Value, true);
+                    if ($decoded === false) {
+                        continue;
+                    }
+                    $result[$mapKey][] = [
+                        'secret_name' => $secretName,
+                        'key' => $key,
+                        'value' => $decoded,
+                    ];
+                }
+            }
+        }
+
+        return $result;
     }
 
     // ── Helpers ─────────────────────────────────────────────────

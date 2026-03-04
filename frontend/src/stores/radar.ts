@@ -15,6 +15,7 @@ export interface RadarCluster {
 
 export interface ResourceEndpoint {
   kind: string;
+  resource_name: string;
   host: string | null;
   port: number | null;
   external_host: string | null;
@@ -22,6 +23,12 @@ export interface ResourceEndpoint {
   node_port: number | null;
   service_type: string | null;
   image: string | null;
+}
+
+export interface DiscoveredCredential {
+  secret_name: string;
+  key: string;
+  value: string;
 }
 
 export interface DiscoveredResource {
@@ -37,6 +44,7 @@ export interface DiscoveredResource {
   node_port: number | null;
   service_type: string | null;
   endpoints: ResourceEndpoint[];
+  credentials: DiscoveredCredential[];
   capacity?: string;
   labels: Record<string, string>;
   already_added: boolean;
@@ -47,6 +55,9 @@ export interface ImportOverride {
   resource_key: string;
   host: string;
   port: number | null;
+  username?: string;
+  password?: string;
+  database_name?: string;
 }
 
 export interface RadarIgnoreEntry {
@@ -233,6 +244,9 @@ export const useRadarStore = defineStore("radar", () => {
         host: ov?.host ?? r.host,
         port: ov?.port ?? r.port,
         kind: r.kind,
+        username: ov?.username ?? undefined,
+        password: ov?.password ?? undefined,
+        database_name: ov?.database_name ?? undefined,
       };
     });
 

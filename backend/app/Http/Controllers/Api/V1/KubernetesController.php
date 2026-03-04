@@ -257,6 +257,9 @@ class KubernetesController extends Controller
             'resources.*.host' => 'nullable|string|max:500',
             'resources.*.port' => 'nullable|integer',
             'resources.*.kind' => 'nullable|string|max:50',
+            'resources.*.username' => 'nullable|string|max:255',
+            'resources.*.password' => 'nullable|string|max:1000',
+            'resources.*.database_name' => 'nullable|string|max:255',
         ]);
 
         $created = [];
@@ -267,6 +270,9 @@ class KubernetesController extends Controller
                 'name' => "{$r['name']} ({$r['namespace']})",
                 'host' => $r['host'] ?? null,
                 'port' => $r['port'] ?? null,
+                'username' => $r['username'] ?? null,
+                'password' => $r['password'] ?? null,
+                'database_name' => $r['database_name'] ?? null,
                 'notes' => "Discovered by Radar from cluster \"{$cluster->name}\" in namespace {$r['namespace']} ({$r['kind']} resource)",
                 'enabled' => true,
             ]);

@@ -25,6 +25,7 @@ import {
   Server,
   Pencil,
   X,
+  KeyRound,
 } from "lucide-vue-next";
 
 const store = useRadarStore();
@@ -53,8 +54,12 @@ const showImportReview = ref(false);
 const importReviewItems = ref<
   Array<{
     resource: DiscoveredResource;
+    endpointIndex: number;
     host: string;
     port: number | null;
+    username: string;
+    password: string;
+    database_name: string;
   }>
 >([]);
 
@@ -67,6 +72,7 @@ function activeEndpoint(r: DiscoveredResource): ResourceEndpoint {
     r.endpoints?.[idx] ??
     r.endpoints?.[0] ?? {
       kind: r.kind,
+      resource_name: r.name,
       host: r.host,
       port: r.port,
       external_host: r.external_host,
@@ -201,12 +207,35 @@ async function importSelected() {
   );
   if (toImport.length === 0) return;
 
-  // Pre-populate import review with best available host/port
-  importReviewItems.value = toImport.map((r) => ({
-    resource: r,
-    host: bestHost(r),
-    port: bestPort(r),
-  }));
+  // Pre-populate import review with best available host/port and credentials
+  importReviewItems.value = toImport.map((r) => {
+    const creds = r.credentials ?? [];
+    // Auto-detect credentials from discovered secrets
+    const passwordCred = creds.find((c) =>
+      c.key.toLowerCase().includes("password"),
+    );
+    const usernameCred = creds.find(
+      (c) =>
+        c.key.toLowerCase().includes("user") &&
+        !c.key.toLowerCase().includes("password"),
+    );
+    const dbNameCred = creds.find(
+      (c) =>
+        c.key.toLowerCase().includes("database") ||
+        c.key.toLowerCase().includes("dbname") ||
+        c.key.toLowerCase().includes("db-name"),
+    );
+
+    return {
+      resource: r,
+      endpointIndex: selectedEndpoints.value[r.resource_key] ?? 0,
+      host: bestHost(r),
+      port: bestPort(r),
+      username: usernameCred?.value ?? "",
+      password: passwordCred?.value ?? "",
+      database_name: dbNameCred?.value ?? "",
+    };
+  });
   showImportReview.value = true;
 }
 
@@ -226,6 +255,20 @@ function cancelImportReview() {
   importReviewItems.value = [];
 }
 
+function switchReviewEndpoint(
+  item: (typeof importReviewItems.value)[0],
+  idx: number,
+) {
+  item.endpointIndex = idx;
+  const ep = item.resource.endpoints?.[idx];
+  if (ep) {
+    item.host = ep.external_host || ep.host || "";
+    item.port = ep.external_host
+      ? ep.external_port ?? ep.port
+      : ep.port ?? null;
+  }
+}
+
 async function confirmImport() {
   importLoading.value = true;
   importMessage.value = null;
@@ -236,6 +279,9 @@ async function confirmImport() {
     resource_key: item.resource.resource_key,
     host: item.host,
     port: item.port,
+    username: item.username || undefined,
+    password: item.password || undefined,
+    database_name: item.database_name || undefined,
   }));
 
   try {
@@ -634,18 +680,18 @@ onMounted(() => {
         </div>
 
         <p class="text-sm text-text-muted mb-4">
-          Verify the host and port for each source. Internal cluster addresses
-          (<code>.svc.cluster.local</code>) are not reachable from outside the
-          cluster — update them if Cellar runs externally.
+          Choose an endpoint and verify connection details for each source.
+          Credentials from Kubernetes Secrets are pre-filled when detected.
         </p>
 
-        <div class="flex-1 overflow-y-auto space-y-3">
+        <div class="flex-1 overflow-y-auto space-y-4">
           <div
             v-for="item in importReviewItems"
             :key="item.resource.resource_key"
-            class="rounded-lg border border-border bg-surface-raised p-3"
+            class="rounded-lg border border-border bg-surface-raised p-4"
           >
-            <div class="flex items-center gap-2 mb-2">
+            <!-- Header: name + type -->
+            <div class="flex items-center gap-2 mb-3">
               <component
                 :is="sourceIcon(item.resource.source_type)"
                 class="h-4 w-4 text-primary"
@@ -653,57 +699,58 @@ onMounted(() => {
               <span class="font-medium text-text-primary text-sm">
                 {{ item.resource.name }}
               </span>
-              <span
-                class="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                :class="kindBadgeClass(item.resource.kind)"
-              >
-                {{ item.resource.kind }}
-              </span>
               <span class="text-xs text-text-muted">
                 {{ sourceTypeLabel(item.resource.source_type) }}
               </span>
-              <span
-                v-if="
-                  item.resource.service_type &&
-                  item.resource.service_type !== 'ClusterIP'
-                "
-                class="rounded-full bg-info/10 px-2 py-0.5 text-[10px] font-medium text-info"
-              >
-                {{ item.resource.service_type }}
+              <span class="text-xs text-text-muted font-mono">
+                {{ item.resource.namespace }}
               </span>
             </div>
 
-            <!-- Internal vs external hints -->
+            <!-- Endpoint selector (when multiple) -->
             <div
-              v-if="
-                item.resource.host &&
-                item.resource.host.endsWith('.svc.cluster.local')
-              "
-              class="mb-2 text-xs text-warning"
+              v-if="item.resource.endpoints && item.resource.endpoints.length > 1"
+              class="mb-3"
             >
-              Internal:
-              <span class="font-mono">
-                {{ item.resource.host }}:{{ item.resource.port }}
-              </span>
-              <span
-                v-if="item.resource.external_host"
-                class="text-success ml-2"
-              >
-                External detected:
-                <span class="font-mono">
-                  {{ item.resource.external_host }}:{{
-                    item.resource.external_port
-                  }}
-                </span>
-              </span>
-              <span
-                v-else-if="item.resource.node_port"
-                class="text-text-muted ml-2"
-              >
-                NodePort: {{ item.resource.node_port }} (set your node IP below)
-              </span>
+              <label class="block text-xs font-medium text-text-muted mb-1.5">
+                Endpoint
+              </label>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="(ep, idx) in item.resource.endpoints"
+                  :key="idx"
+                  class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors"
+                  :class="
+                    item.endpointIndex === idx
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border text-text-muted hover:border-primary/30'
+                  "
+                  @click="switchReviewEndpoint(item, idx)"
+                >
+                  <span
+                    class="rounded-full px-1.5 py-0.5 text-[10px]"
+                    :class="kindBadgeClass(ep.kind)"
+                  >
+                    {{ ep.kind }}
+                  </span>
+                  <span class="font-mono">{{ ep.resource_name }}</span>
+                  <span
+                    v-if="ep.service_type && ep.service_type !== 'ClusterIP'"
+                    class="text-[10px] text-info"
+                  >
+                    {{ ep.service_type }}
+                  </span>
+                  <span
+                    v-if="ep.external_host"
+                    class="text-[10px] text-success"
+                  >
+                    external
+                  </span>
+                </button>
+              </div>
             </div>
 
+            <!-- Host + Port -->
             <div class="grid grid-cols-[1fr_100px] gap-2">
               <div>
                 <label class="block text-xs font-medium text-text-muted mb-0.5">
@@ -731,6 +778,58 @@ onMounted(() => {
                   class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
                 />
               </div>
+            </div>
+
+            <!-- Credentials (only for databases, not PVCs) -->
+            <div
+              v-if="item.resource.source_type !== 'directory'"
+              class="mt-3 grid grid-cols-3 gap-2"
+            >
+              <div>
+                <label class="block text-xs font-medium text-text-muted mb-0.5">
+                  Username
+                </label>
+                <input
+                  v-model="item.username"
+                  type="text"
+                  placeholder="optional"
+                  class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-text-muted mb-0.5">
+                  Password
+                </label>
+                <input
+                  v-model="item.password"
+                  type="password"
+                  placeholder="optional"
+                  class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-text-muted mb-0.5">
+                  Database
+                </label>
+                <input
+                  v-model="item.database_name"
+                  type="text"
+                  placeholder="optional"
+                  class="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                />
+              </div>
+            </div>
+
+            <!-- Secrets hint -->
+            <div
+              v-if="item.resource.credentials && item.resource.credentials.length > 0"
+              class="mt-2 flex items-center gap-1.5 text-xs text-text-muted"
+            >
+              <KeyRound class="h-3 w-3 text-success" />
+              Credentials auto-filled from secret
+              <span class="font-mono text-text-primary">
+                {{ item.resource.credentials[0].secret_name }}
+              </span>
             </div>
           </div>
         </div>
@@ -900,13 +999,14 @@ onMounted(() => {
               >
                 <button
                   v-for="(ep, idx) in resource.endpoints"
-                  :key="ep.kind"
+                  :key="idx"
                   class="rounded-full px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer"
                   :class="
                     (selectedEndpoints[resource.resource_key] ?? 0) === idx
                       ? kindBadgeClass(ep.kind)
                       : 'bg-surface-raised text-text-muted hover:opacity-80'
                   "
+                  :title="`${ep.kind}: ${ep.resource_name}`"
                   @click.stop="selectedEndpoints[resource.resource_key] = idx"
                 >
                   {{ ep.kind }}
@@ -933,6 +1033,14 @@ onMounted(() => {
                 class="rounded-full bg-info/10 px-2 py-0.5 text-xs font-medium text-info"
               >
                 {{ activeEndpoint(resource).service_type }}
+              </span>
+              <span
+                v-if="resource.credentials && resource.credentials.length > 0"
+                class="flex items-center gap-0.5 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success"
+                title="Credentials found in Kubernetes Secrets"
+              >
+                <KeyRound class="h-3 w-3" />
+                Secret
               </span>
             </div>
             <p class="mt-0.5 text-sm text-text-muted truncate">
