@@ -34,17 +34,20 @@ class RunVerify implements ShouldQueue
             'job_type' => 'verify',
             'status' => 'running',
             'started_at' => now(),
+            'progress' => 5,
         ]);
 
         try {
             $engine = new BorgEngine(config('cellar.borg_path', '/usr/bin/borg'));
             $repoPath = rtrim($plan->repository->config['path'] ?? '/data/repositories', '/').'/'.$plan->id;
 
+            $job->update(['progress' => 20]);
             $passed = $engine->verify($repoPath, $this->archiveId);
 
             $job->update([
                 'status' => $passed ? 'success' : 'failed',
                 'finished_at' => now(),
+                'progress' => 100,
                 'error_message' => $passed ? '' : 'Verification check failed.',
                 'metadata' => [
                     'archive_id' => $this->archiveId,

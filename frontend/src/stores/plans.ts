@@ -1,6 +1,13 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import api from "@/lib/api";
+
+export interface RunningJob {
+  id: string;
+  job_type: string;
+  progress: number;
+  started_at: string | null;
+}
 
 export interface BackupPlan {
   id: string;
@@ -15,6 +22,7 @@ export interface BackupPlan {
   last_run: string | null;
   next_run: string | null;
   created_at: string;
+  running_job: RunningJob | null;
 }
 
 export interface Job {
@@ -23,6 +31,7 @@ export interface Job {
   plan_name: string;
   job_type: string;
   status: string;
+  progress: number;
   started_at: string | null;
   finished_at: string | null;
   error_message: string;
@@ -71,12 +80,47 @@ export const usePlansStore = defineStore("plans", () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
 
+  // Polling
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  const POLL_INTERVAL = 3000;
+
+  const hasRunningJobs = computed(
+    () =>
+      plans.value.some((p: BackupPlan) => p.status === "running") ||
+      jobs.value.some((j: Job) => j.status === "running"),
+  );
+
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(async () => {
+      if (hasRunningJobs.value) {
+        await Promise.all([fetchPlans(), fetchJobs()]);
+      } else {
+        stopPolling();
+      }
+    }, POLL_INTERVAL);
+  }
+
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function ensurePolling() {
+    if (hasRunningJobs.value) {
+      startPolling();
+    }
+  }
+
   async function fetchPlans() {
     loading.value = true;
     error.value = null;
     try {
       const { data } = await api.get("/plans");
       plans.value = Array.isArray(data) ? data : (data.data ?? data);
+      ensurePolling();
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : "Failed to fetch plans";
     } finally {
@@ -88,6 +132,7 @@ export const usePlansStore = defineStore("plans", () => {
     try {
       const { data } = await api.get("/jobs");
       jobs.value = Array.isArray(data) ? data : (data.data ?? data);
+      ensurePolling();
     } catch {
       /* silent */
     }
@@ -173,6 +218,7 @@ export const usePlansStore = defineStore("plans", () => {
     repositories,
     loading,
     error,
+    hasRunningJobs,
     fetchPlans,
     fetchJobs,
     fetchArchives,
@@ -183,5 +229,7 @@ export const usePlansStore = defineStore("plans", () => {
     triggerVerify,
     triggerRestore,
     downloadArchive,
+    startPolling,
+    stopPolling,
   };
 });

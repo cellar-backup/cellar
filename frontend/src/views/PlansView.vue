@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { usePlansStore } from "@/stores/plans";
 import {
   Play,
@@ -14,9 +14,31 @@ import {
 
 const store = usePlansStore();
 
+// Live elapsed time ticker
+const now = ref(Date.now());
+let tickTimer: ReturnType<typeof setInterval> | null = null;
+
 onMounted(() => {
   store.fetchPlans();
+  tickTimer = setInterval(() => {
+    now.value = Date.now();
+  }, 1000);
 });
+
+onUnmounted(() => {
+  store.stopPolling();
+  if (tickTimer) clearInterval(tickTimer);
+});
+
+function elapsed(startedAt: string | null) {
+  if (!startedAt) return "";
+  const ms = now.value - new Date(startedAt).getTime();
+  const secs = Math.max(0, Math.round(ms / 1000));
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  const rem = secs % 60;
+  return `${mins}m ${rem}s`;
+}
 
 // ---- Action state ----
 const actionLoading = ref<string | null>(null);
@@ -251,6 +273,25 @@ function closeImport() {
             Scheduled
           </span>
           <span v-else class="text-warning"> Paused </span>
+        </div>
+
+        <!-- Progress bar (running jobs) -->
+        <div v-if="plan.running_job" class="mt-3 space-y-1.5">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-info font-medium capitalize">
+              {{ plan.running_job.job_type }} in progress…
+            </span>
+            <span class="text-text-muted tabular-nums">
+              {{ plan.running_job.progress }}% ·
+              {{ elapsed(plan.running_job.started_at) }}
+            </span>
+          </div>
+          <div class="h-1.5 w-full overflow-hidden rounded-full bg-info/10">
+            <div
+              class="h-full rounded-full bg-info transition-all duration-500 ease-out"
+              :style="{ width: plan.running_job.progress + '%' }"
+            />
+          </div>
         </div>
 
         <!-- Action message -->

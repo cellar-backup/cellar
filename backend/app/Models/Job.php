@@ -24,6 +24,7 @@ class Job extends Model
         'finished_at',
         'log_path',
         'error_message',
+        'progress',
         'metadata',
         'created_at',
     ];
@@ -35,6 +36,7 @@ class Job extends Model
             'status' => JobStatus::class,
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
+            'progress' => 'integer',
             'metadata' => 'array',
             'created_at' => 'datetime',
         ];

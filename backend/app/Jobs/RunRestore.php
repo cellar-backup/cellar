@@ -40,6 +40,7 @@ class RunRestore implements ShouldQueue
             'job_type' => 'restore',
             'status' => 'running',
             'started_at' => now(),
+            'progress' => 5,
         ]);
 
         $tmpDir = sys_get_temp_dir().'/cellar_restore_'.Str::random(8);
@@ -50,11 +51,14 @@ class RunRestore implements ShouldQueue
 
             // 1. Extract archive to temp directory
             mkdir($tmpDir, 0755, true);
+            $job->update(['progress' => 15]);
             $result = $engine->restore($repoPath, $archive->archive_id, $tmpDir);
 
             if (! $result->success) {
                 throw new \RuntimeException('Borg extract failed: '.$result->message);
             }
+
+            $job->update(['progress' => 50]);
 
             // 2. Find the dump file in the extracted content
             $dumpFile = self::findDumpFile($tmpDir);
@@ -63,6 +67,7 @@ class RunRestore implements ShouldQueue
             }
 
             // 3. Restore dump into the source database
+            $job->update(['progress' => 60]);
             if ($source->getIsDatabase()) {
                 $restoreResult = DatabaseRestorer::restore(
                     $source->source_type->value,
@@ -84,6 +89,7 @@ class RunRestore implements ShouldQueue
             $job->update([
                 'status' => 'success',
                 'finished_at' => now(),
+                'progress' => 100,
                 'metadata' => [
                     'archive_id' => $archive->archive_id,
                     'dump_file' => basename($dumpFile),

@@ -8,6 +8,7 @@ use App\Jobs\RunPrune;
 use App\Jobs\RunRestore;
 use App\Jobs\RunVerify;
 use App\Models\BackupPlan;
+use App\Models\Job;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -17,8 +18,18 @@ class BackupPlanController extends Controller
     {
         $plans = BackupPlan::with(['source', 'repository'])
             ->orderByDesc('updated_at')
+            ->get();
+
+        // Fetch running jobs for all plans in one query
+        $runningJobs = Job::where('status', 'running')
+            ->whereIn('plan_id', $plans->pluck('id'))
             ->get()
-            ->map(fn (BackupPlan $p) => [
+            ->keyBy('plan_id');
+
+        $result = $plans->map(function (BackupPlan $p) use ($runningJobs) {
+            $runningJob = $runningJobs->get($p->id);
+
+            return [
                 'id' => $p->id,
                 'name' => $p->name,
                 'source_name' => $p->source_name,
@@ -31,9 +42,16 @@ class BackupPlanController extends Controller
                 'last_run' => $p->last_run,
                 'next_run' => $p->next_run,
                 'created_at' => $p->created_at,
-            ]);
+                'running_job' => $runningJob ? [
+                    'id' => $runningJob->id,
+                    'job_type' => $runningJob->job_type,
+                    'progress' => $runningJob->progress,
+                    'started_at' => $runningJob->started_at,
+                ] : null,
+            ];
+        });
 
-        return response()->json($plans);
+        return response()->json($result);
     }
 
     public function store(Request $request): JsonResponse

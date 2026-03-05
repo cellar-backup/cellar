@@ -39,13 +39,17 @@ class RunPrune implements ShouldQueue
             'job_type' => 'prune',
             'status' => 'running',
             'started_at' => now(),
+            'progress' => 5,
         ]);
 
         try {
             $engine = new BorgEngine(config('cellar.borg_path', '/usr/bin/borg'));
             $repoPath = rtrim($plan->repository->config['path'] ?? '/data/repositories', '/').'/'.$plan->id;
 
+            $job->update(['progress' => 20]);
             $result = $engine->prune($repoPath, $plan->retention_policy, $this->dryRun);
+
+            $job->update(['progress' => 60]);
 
             // If not dry run, reconcile DB archives with what's actually in the repo
             if (! $this->dryRun) {
@@ -60,6 +64,7 @@ class RunPrune implements ShouldQueue
             $job->update([
                 'status' => 'success',
                 'finished_at' => now(),
+                'progress' => 100,
                 'metadata' => [
                     'pruned' => $result->pruned,
                     'kept' => $result->kept,

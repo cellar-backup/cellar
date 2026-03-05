@@ -35,6 +35,7 @@ class RunBackup implements ShouldQueue
             'job_type' => 'backup',
             'status' => 'running',
             'started_at' => now(),
+            'progress' => 5,
         ]);
 
         $plan->update(['status' => 'running']);
@@ -50,10 +51,14 @@ class RunBackup implements ShouldQueue
                 $engine->initialize($repoPath);
             }
 
+            $job->update(['progress' => 10]);
+
             // Prepare source
             if ($source->getIsDatabase()) {
                 $tmpDir = sys_get_temp_dir().'/cellar_dump_'.Str::random(8);
                 mkdir($tmpDir, 0755, true);
+
+                $job->update(['progress' => 15]);
 
                 $dumpResult = DatabaseDumper::dump(
                     $source->source_type->value,
@@ -72,8 +77,10 @@ class RunBackup implements ShouldQueue
                 }
 
                 $sourcePaths = [$tmpDir];
+                $job->update(['progress' => 30]);
             } else {
                 $sourcePaths = [$source->path];
+                $job->update(['progress' => 30]);
             }
 
             // Build archive name
@@ -87,6 +94,8 @@ class RunBackup implements ShouldQueue
                 $archiveName,
                 compression: $plan->compression ?? 'lz4',
             );
+
+            $job->update(['progress' => 85]);
 
             // Create archive record
             Archive::create([
@@ -104,6 +113,7 @@ class RunBackup implements ShouldQueue
             $job->update([
                 'status' => 'success',
                 'finished_at' => now(),
+                'progress' => 100,
                 'metadata' => [
                     'archive_id' => $result->archiveId,
                     'size_original' => $result->sizeOriginal,

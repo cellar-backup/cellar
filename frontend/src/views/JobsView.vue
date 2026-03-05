@@ -1,12 +1,24 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { usePlansStore } from "@/stores/plans";
-import { Clock, CircleCheck, CircleX } from "lucide-vue-next";
+import { Clock, CircleCheck, CircleX, Loader2 } from "lucide-vue-next";
 
 const store = usePlansStore();
 
+// Live elapsed time ticker
+const now = ref(Date.now());
+let tickTimer: ReturnType<typeof setInterval> | null = null;
+
 onMounted(() => {
   store.fetchJobs();
+  tickTimer = setInterval(() => {
+    now.value = Date.now();
+  }, 1000);
+});
+
+onUnmounted(() => {
+  store.stopPolling();
+  if (tickTimer) clearInterval(tickTimer);
 });
 
 function statusIcon(status: string) {
@@ -15,6 +27,8 @@ function statusIcon(status: string) {
       return CircleCheck;
     case "failed":
       return CircleX;
+    case "running":
+      return Loader2;
     default:
       return Clock;
   }
@@ -69,9 +83,10 @@ function fmtDate(dateStr: string | null) {
 }
 
 function duration(start: string | null, end: string | null) {
-  if (!start || !end) return "—";
-  const ms = new Date(end).getTime() - new Date(start).getTime();
-  const secs = Math.round(ms / 1000);
+  if (!start) return "—";
+  const endMs = end ? new Date(end).getTime() : now.value;
+  const ms = endMs - new Date(start).getTime();
+  const secs = Math.max(0, Math.round(ms / 1000));
   if (secs < 60) return `${secs}s`;
   const mins = Math.floor(secs / 60);
   const rem = secs % 60;
@@ -116,6 +131,7 @@ function duration(start: string | null, end: string | null) {
             <th class="px-5 py-3 font-medium">Plan</th>
             <th class="px-5 py-3 font-medium">Started</th>
             <th class="px-5 py-3 font-medium">Duration</th>
+            <th class="px-5 py-3 font-medium">Progress</th>
             <th class="px-5 py-3 font-medium">Message</th>
           </tr>
         </thead>
@@ -133,7 +149,10 @@ function duration(start: string | null, end: string | null) {
                 <component
                   :is="statusIcon(job.status)"
                   class="h-3.5 w-3.5"
-                  :class="statusClass(job.status)"
+                  :class="[
+                    statusClass(job.status),
+                    job.status === 'running' ? 'animate-spin' : '',
+                  ]"
                 />
                 {{ job.status }}
               </span>
@@ -147,8 +166,32 @@ function duration(start: string | null, end: string | null) {
             <td class="px-5 py-3 text-text-muted">
               {{ fmtDate(job.started_at) }}
             </td>
-            <td class="px-5 py-3 text-text-muted">
+            <td class="px-5 py-3 text-text-muted tabular-nums">
               {{ duration(job.started_at, job.finished_at) }}
+            </td>
+            <td class="px-5 py-3">
+              <div
+                v-if="job.status === 'running'"
+                class="flex items-center gap-2 min-w-[120px]"
+              >
+                <div
+                  class="h-1.5 flex-1 overflow-hidden rounded-full bg-info/10"
+                >
+                  <div
+                    class="h-full rounded-full bg-info transition-all duration-500 ease-out"
+                    :style="{ width: (job.progress ?? 0) + '%' }"
+                  />
+                </div>
+                <span class="text-xs text-info tabular-nums whitespace-nowrap"
+                  >{{ job.progress ?? 0 }}%</span
+                >
+              </div>
+              <span
+                v-else-if="job.status === 'success'"
+                class="text-xs text-success"
+                >100%</span
+              >
+              <span v-else class="text-xs text-text-muted">—</span>
             </td>
             <td class="px-5 py-3 max-w-xs truncate text-text-muted">
               {{ job.error_message || "—" }}

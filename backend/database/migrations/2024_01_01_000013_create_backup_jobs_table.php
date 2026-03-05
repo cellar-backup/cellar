@@ -17,6 +17,7 @@ return new class extends Migration
             $table->timestamp('finished_at')->nullable();
             $table->string('log_path', 500)->default('');
             $table->text('error_message')->default('');
+            $table->unsignedTinyInteger('progress')->default(0);
             $table->json('metadata')->default('{}');
             $table->timestamp('created_at')->useCurrent();
         });
