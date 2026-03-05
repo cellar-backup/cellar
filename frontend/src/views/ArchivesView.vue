@@ -95,10 +95,14 @@ const pinLoading = ref<string | null>(null);
 
 async function togglePin(arc: { id: string; keep_forever: boolean }) {
   pinLoading.value = arc.id;
+  const previous = arc.keep_forever;
+  // Optimistic update — flip immediately so the UI reacts instantly
+  arc.keep_forever = !previous;
   try {
-    await store.toggleKeepForever(arc.id, !arc.keep_forever);
-    arc.keep_forever = !arc.keep_forever;
+    await store.toggleKeepForever(arc.id, !previous);
   } catch {
+    // Revert on failure
+    arc.keep_forever = previous;
     actionMessage.value = {
       archiveId: arc.id,
       text: "Failed to update pin status.",
