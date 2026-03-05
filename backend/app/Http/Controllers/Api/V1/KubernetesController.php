@@ -294,6 +294,13 @@ class KubernetesController extends Controller
                 'database_name' => $r['database_name'] ?? '',
                 'notes' => "Discovered by Radar from cluster \"{$cluster->name}\" in namespace {$r['namespace']} ({$r['kind']} resource)",
                 'enabled' => true,
+                'extra_config' => [
+                    'kubernetes' => [
+                        'cluster_id' => $cluster->id,
+                        'namespace' => $r['namespace'],
+                        'app_name' => $r['name'],
+                    ],
+                ],
             ]);
 
             // Create a backup plan for each source

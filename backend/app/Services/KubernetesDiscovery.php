@@ -260,6 +260,11 @@ class KubernetesDiscovery
 
                 // Merge labels
                 $groups[$key]['labels'] = array_merge($groups[$key]['labels'] ?? [], $r['labels'] ?? []);
+
+                // Merge env_credentials from pod (services don't have them)
+                if (! empty($r['env_credentials']) && empty($groups[$key]['env_credentials'])) {
+                    $groups[$key]['env_credentials'] = $r['env_credentials'];
+                }
             }
         }
 
@@ -272,6 +277,66 @@ class KubernetesDiscovery
             $ns = $g['namespace'];
             $appName = $g['name'];
             $g['credentials'] = $secrets["{$ns}:{$appName}"] ?? [];
+
+            // Enrich credentials using env-var analysis from pod containers.
+            // When a pod has e.g. MYSQL_ROOT_PASSWORD referencing a secret key
+            // we can infer the username is 'root' even if the secret has no username key.
+            $envCreds = $g['env_credentials'] ?? [];
+            if ($envCreds) {
+                // Merge inline credential values (from plain env vars) into credentials
+                foreach (['username', 'password', 'database'] as $credType) {
+                    if (! empty($envCreds[$credType]['value'])) {
+                        // Add as a synthetic credential entry if not already present
+                        $alreadyHas = false;
+                        foreach ($g['credentials'] as $c) {
+                            $kl = strtolower($c['key']);
+                            if ($credType === 'username' && (str_contains($kl, 'user') && ! str_contains($kl, 'password'))) {
+                                $alreadyHas = true;
+                                break;
+                            }
+                            if ($credType === 'password' && str_contains($kl, 'password')) {
+                                $alreadyHas = true;
+                                break;
+                            }
+                            if ($credType === 'database' && (str_contains($kl, 'database') || str_contains($kl, 'dbname'))) {
+                                $alreadyHas = true;
+                                break;
+                            }
+                        }
+                        if (! $alreadyHas) {
+                            $g['credentials'][] = [
+                                'secret_name' => '_env',
+                                'key' => $credType,
+                                'value' => $envCreds[$credType]['value'],
+                            ];
+                        }
+                    }
+                }
+
+                // If we have a password from secrets but no username, try to infer
+                // from the env var name (e.g. MYSQL_ROOT_PASSWORD → root)
+                $hasPassword = false;
+                $hasUsername = false;
+                foreach ($g['credentials'] as $c) {
+                    $kl = strtolower($c['key']);
+                    if (str_contains($kl, 'password')) {
+                        $hasPassword = true;
+                    }
+                    if (str_contains($kl, 'user') && ! str_contains($kl, 'password')) {
+                        $hasUsername = true;
+                    }
+                }
+                if ($hasPassword && ! $hasUsername && ! empty($envCreds['username']['inferred'])) {
+                    $g['credentials'][] = [
+                        'secret_name' => '_inferred',
+                        'key' => 'username',
+                        'value' => $envCreds['username']['inferred'],
+                    ];
+                }
+            }
+
+            // Clean up internal field
+            unset($g['env_credentials']);
         }
         unset($g);
 
@@ -321,6 +386,9 @@ class KubernetesDiscovery
                     ?? $labels['app']
                     ?? $podName;
 
+                // Extract env-var based credentials (inline values + secretKeyRef mapping)
+                $envCredentials = self::extractEnvCredentials($container['env'] ?? [], $sourceType);
+
                 $found[] = [
                     'kind' => 'Pod',
                     'namespace' => $ns,
@@ -336,6 +404,7 @@ class KubernetesDiscovery
                     'node_port' => null,
                     'service_type' => null,
                     'labels' => $labels,
+                    'env_credentials' => $envCredentials,
                 ];
             }
         }
@@ -606,6 +675,82 @@ class KubernetesDiscovery
     }
 
     // ── Helpers ─────────────────────────────────────────────────
+
+    /**
+     * Extract credential info from container env vars.
+     *
+     * Inspects well-known env var names (MYSQL_ROOT_PASSWORD, MYSQL_USER,
+     * POSTGRES_USER, etc.) to discover inline values and infer usernames
+     * when a root password is configured but no explicit user is set.
+     *
+     * @param  array   $envVars    Container env var definitions from pod spec
+     * @param  string  $sourceType The detected source type (mysql, mariadb, postgresql, etc.)
+     * @return array   Keys: username, password, database — each with 'value' and/or 'inferred'
+     */
+    private static function extractEnvCredentials(array $envVars, string $sourceType): array
+    {
+        $result = [
+            'username' => ['value' => null, 'inferred' => null],
+            'password' => ['value' => null, 'inferred' => null],
+            'database' => ['value' => null, 'inferred' => null],
+        ];
+
+        // Map of env var names → what they mean
+        $envMap = [
+            // MySQL / MariaDB
+            'MYSQL_ROOT_PASSWORD' => ['type' => 'password', 'infer_user' => 'root'],
+            'MARIADB_ROOT_PASSWORD' => ['type' => 'password', 'infer_user' => 'root'],
+            'MYSQL_PASSWORD' => ['type' => 'password'],
+            'MARIADB_PASSWORD' => ['type' => 'password'],
+            'MYSQL_USER' => ['type' => 'username'],
+            'MARIADB_USER' => ['type' => 'username'],
+            'MYSQL_DATABASE' => ['type' => 'database'],
+            'MARIADB_DATABASE' => ['type' => 'database'],
+            // PostgreSQL
+            'POSTGRES_PASSWORD' => ['type' => 'password', 'infer_user' => 'postgres'],
+            'POSTGRES_USER' => ['type' => 'username'],
+            'POSTGRES_DB' => ['type' => 'database'],
+            'PGPASSWORD' => ['type' => 'password'],
+            'PGUSER' => ['type' => 'username'],
+            'PGDATABASE' => ['type' => 'database'],
+        ];
+
+        $inferredUser = null;
+        $hasExplicitUser = false;
+
+        foreach ($envVars as $env) {
+            $name = $env['name'] ?? '';
+            $value = $env['value'] ?? null; // inline value (plain text)
+
+            $mapping = $envMap[$name] ?? null;
+            if (! $mapping) {
+                continue;
+            }
+
+            $credType = $mapping['type'];
+
+            // If there's a plain-text value, capture it
+            if ($value !== null && $value !== '') {
+                $result[$credType]['value'] = $result[$credType]['value'] ?? $value;
+            }
+
+            // If this env var implies a specific username
+            if (isset($mapping['infer_user'])) {
+                $inferredUser = $mapping['infer_user'];
+            }
+
+            if ($credType === 'username') {
+                $hasExplicitUser = true;
+            }
+        }
+
+        // If we found a root password env but no explicit user env, infer the username
+        if ($inferredUser && ! $hasExplicitUser) {
+            $result['username']['inferred'] = $inferredUser;
+        }
+
+        return $result;
+    }
 
     private function detectSourceTypeFromImage(string $image): ?string
     {

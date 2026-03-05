@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Archive;
 use App\Models\BackupPlan;
 use App\Models\Job;
+use App\Models\RadarCluster;
 use App\Services\DatabaseDumper;
 use App\Services\Engines\BorgEngine;
 use App\Services\JobLogger;
@@ -71,17 +72,34 @@ class RunBackup implements ShouldQueue
                 $log->line("Dumping {$source->source_type->value} database: {$source->database_name}");
                 $log->line("Host: {$source->host}:{$source->port}");
 
-                $dumpResult = DatabaseDumper::dump(
-                    $source->source_type->value,
-                    [
-                        'host' => $source->host,
-                        'port' => $source->port,
-                        'username' => $source->username,
-                        'password' => $source->password,
-                        'database_name' => $source->database_name,
-                    ],
-                    $tmpDir,
-                );
+                $dbConfig = [
+                    'host' => $source->host,
+                    'port' => $source->port,
+                    'username' => $source->username,
+                    'password' => $source->password,
+                    'database_name' => $source->database_name,
+                ];
+
+                $dumpResult = null;
+                $k8s = $source->extra_config['kubernetes'] ?? null;
+
+                // Try kubectl exec for K8s-sourced databases (runs dump inside the pod)
+                if ($k8s && ! empty($k8s['cluster_id']) && ! empty($k8s['namespace']) && ! empty($k8s['app_name'])) {
+                    $dumpResult = $this->tryKubectlDump($source, $dbConfig, $tmpDir, $k8s, $log);
+                }
+
+                // Fall back to direct network connection
+                if (! $dumpResult || ! $dumpResult->success) {
+                    if ($dumpResult) {
+                        $log->line("kubectl exec failed, trying direct connection...");
+                    }
+
+                    $dumpResult = DatabaseDumper::dump(
+                        $source->source_type->value,
+                        $dbConfig,
+                        $tmpDir,
+                    );
+                }
 
                 if (! $dumpResult->success) {
                     $log->line("FAILED: {$dumpResult->message}");
@@ -89,6 +107,11 @@ class RunBackup implements ShouldQueue
                 }
 
                 $log->line("Dump completed: {$dumpResult->dumpPath} ({$dumpResult->sizeBytes} bytes)");
+                if (str_contains($dumpResult->message, 'kubectl exec')) {
+                    $log->line("Method: kubectl exec (in-pod dump)");
+                } else {
+                    $log->line("Method: direct network connection");
+                }
                 $sourcePaths = [$tmpDir];
                 $job->update(['progress' => 30]);
             } else {
@@ -185,5 +208,69 @@ class RunBackup implements ShouldQueue
         }
 
         rmdir($dir);
+    }
+
+    /**
+     * Attempt to dump a database via kubectl exec (inside the K8s pod).
+     *
+     * This is the preferred method for K8s-sourced databases because it
+     * runs the dump inside the container where the DB allows localhost
+     * connections, bypassing network/auth restrictions.
+     */
+    private function tryKubectlDump(
+        \App\Models\Source $source,
+        array $dbConfig,
+        string $tmpDir,
+        array $k8s,
+        JobLogger $log,
+    ): ?\App\Services\DumpResult {
+        try {
+            $cluster = RadarCluster::find($k8s['cluster_id']);
+            if (! $cluster) {
+                $log->line("K8s cluster {$k8s['cluster_id']} not found, skipping kubectl exec.");
+                return null;
+            }
+
+            $kubectlPath = config('cellar.kubectl_path', '/usr/local/bin/kubectl');
+            $tempKubeconfig = $cluster->writeKubeconfigTempFile();
+
+            try {
+                $kubectlConfig = [
+                    'kubectl_path' => $kubectlPath,
+                    'kubeconfig' => $tempKubeconfig,
+                    'context' => $cluster->context,
+                    'namespace' => $k8s['namespace'],
+                    'pod' => null, // will be resolved
+                ];
+
+                // Find a running pod for this app
+                $log->line("Looking for running pod (app={$k8s['app_name']}) in namespace {$k8s['namespace']}...");
+                $podName = DatabaseDumper::findKubectlPod($kubectlConfig, $k8s['app_name']);
+
+                if (! $podName) {
+                    $log->line("No running pod found for app={$k8s['app_name']}.");
+                    return null;
+                }
+
+                $log->line("Found pod: {$podName}");
+                $kubectlConfig['pod'] = $podName;
+
+                $log->line("Dumping via kubectl exec into {$podName}...");
+                return DatabaseDumper::dumpViaKubectl(
+                    $source->source_type->value,
+                    $dbConfig,
+                    $tmpDir,
+                    $kubectlConfig,
+                );
+            } finally {
+                // Cleanup temp kubeconfig
+                if ($tempKubeconfig && file_exists($tempKubeconfig)) {
+                    unlink($tempKubeconfig);
+                }
+            }
+        } catch (\Throwable $e) {
+            $log->line("kubectl exec dump error: {$e->getMessage()}");
+            return null;
+        }
     }
 }
