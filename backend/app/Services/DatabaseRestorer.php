@@ -127,6 +127,7 @@ class DatabaseRestorer
             '-h', $host,
             '-P', $port,
             '-u', $user,
+            '--skip-ssl',
             $database,
         ];
 

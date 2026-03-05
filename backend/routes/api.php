@@ -57,11 +57,13 @@ Route::prefix('v1')->group(function () {
         // Jobs (read-only)
         Route::get('jobs', [JobController::class, 'index']);
         Route::get('jobs/{job}', [JobController::class, 'show']);
+        Route::get('jobs/{job}/log', [JobController::class, 'log']);
 
         // Archives
         Route::get('archives', [ArchiveController::class, 'index']);
         Route::get('archives/{archive}', [ArchiveController::class, 'show']);
         Route::delete('archives/{archive}', [ArchiveController::class, 'destroy']);
+        Route::patch('archives/{archive}/keep-forever', [ArchiveController::class, 'keepForever']);
         Route::post('archives/{archive}/restore', [ArchiveController::class, 'restore']);
         Route::get('archives/{archive}/download', [ArchiveController::class, 'download']);
 

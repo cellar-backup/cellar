@@ -54,6 +54,11 @@ Schedule::command('cellar:sync-archives')
     ->name('cellar:sync-archives')
     ->withoutOverlapping();
 
+// Clean up old job log files daily at 04:00 (retain 30 days)
+Schedule::call(function () {
+    \App\Services\JobLogger::cleanup(30);
+})->dailyAt('04:00')->name('cellar:cleanup-job-logs');
+
 /*
 |--------------------------------------------------------------------------
 | Cron helpers

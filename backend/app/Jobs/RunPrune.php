@@ -6,6 +6,7 @@ use App\Models\Archive;
 use App\Models\BackupPlan;
 use App\Models\Job;
 use App\Services\Engines\BorgEngine;
+use App\Services\JobLogger;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -42,23 +43,45 @@ class RunPrune implements ShouldQueue
             'progress' => 5,
         ]);
 
+        $log = new JobLogger($job);
+
         try {
+            $log->section('Initializing prune');
+            $log->line("Plan: {$plan->name}");
+            $log->line('Retention policy: '.json_encode($plan->retention_policy));
+            $log->line('Dry run: '.($this->dryRun ? 'yes' : 'no'));
+
             $engine = new BorgEngine(config('cellar.borg_path', '/usr/bin/borg'));
             $repoPath = rtrim($plan->repository->config['path'] ?? '/data/repositories', '/').'/'.$plan->id;
 
             $job->update(['progress' => 20]);
+            $log->section('Running borg prune');
             $result = $engine->prune($repoPath, $plan->retention_policy, $this->dryRun);
+            $log->line($result->message);
 
             $job->update(['progress' => 60]);
 
             // If not dry run, reconcile DB archives with what's actually in the repo
             if (! $this->dryRun) {
+                $log->section('Reconciling archives');
                 $currentArchives = $engine->listArchives($repoPath);
                 $currentIds = collect($currentArchives)->pluck('archiveId')->all();
+                $log->line('Archives remaining in repo: '.count($currentIds));
 
-                Archive::where('plan_id', $plan->id)
+                $deleted = Archive::where('plan_id', $plan->id)
+                    ->where('keep_forever', false)
                     ->whereNotIn('archive_id', $currentIds)
                     ->delete();
+                $log->line("Removed {$deleted} archive records from database.");
+
+                // Never delete keep_forever archives from DB
+                $kept = Archive::where('plan_id', $plan->id)
+                    ->where('keep_forever', true)
+                    ->whereNotIn('archive_id', $currentIds)
+                    ->count();
+                if ($kept > 0) {
+                    $log->line("WARNING: {$kept} keep-forever archive(s) were pruned from borg but preserved in database.");
+                }
             }
 
             $job->update([
@@ -71,8 +94,14 @@ class RunPrune implements ShouldQueue
                     'dry_run' => $this->dryRun,
                 ],
             ]);
+            $log->section('Completed');
+            $log->line('Prune finished successfully.');
+            $log->close();
 
         } catch (\Throwable $e) {
+            $log->error($e);
+            $log->close();
+
             $job->update([
                 'status' => 'failed',
                 'finished_at' => now(),

@@ -7,6 +7,7 @@ use App\Models\BackupPlan;
 use App\Models\Job;
 use App\Services\DatabaseDumper;
 use App\Services\Engines\BorgEngine;
+use App\Services\JobLogger;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -41,13 +42,20 @@ class RunBackup implements ShouldQueue
         $plan->update(['status' => 'running']);
 
         $tmpDir = null;
+        $log = new JobLogger($job);
 
         try {
+            $log->section('Initializing backup');
+            $log->line("Plan: {$plan->name}");
+            $log->line("Source: {$source->display_label} ({$source->source_type->value})");
+            $log->line("Repository: {$repo->name}");
+
             $engine = new BorgEngine(config('cellar.borg_path', '/usr/bin/borg'));
             $repoPath = rtrim($repo->config['path'] ?? '/data/repositories', '/').'/'.$plan->id;
 
             // Ensure repo is initialized
             if (! is_dir($repoPath)) {
+                $log->line("Initializing new borg repository at {$repoPath}");
                 $engine->initialize($repoPath);
             }
 
@@ -59,6 +67,9 @@ class RunBackup implements ShouldQueue
                 mkdir($tmpDir, 0755, true);
 
                 $job->update(['progress' => 15]);
+                $log->section('Database dump');
+                $log->line("Dumping {$source->source_type->value} database: {$source->database_name}");
+                $log->line("Host: {$source->host}:{$source->port}");
 
                 $dumpResult = DatabaseDumper::dump(
                     $source->source_type->value,
@@ -73,12 +84,16 @@ class RunBackup implements ShouldQueue
                 );
 
                 if (! $dumpResult->success) {
+                    $log->line("FAILED: {$dumpResult->message}");
                     throw new \RuntimeException('Database dump failed: '.$dumpResult->message);
                 }
 
+                $log->line("Dump completed: {$dumpResult->dumpPath} ({$dumpResult->sizeBytes} bytes)");
                 $sourcePaths = [$tmpDir];
                 $job->update(['progress' => 30]);
             } else {
+                $log->section('Filesystem source');
+                $log->line("Path: {$source->path}");
                 $sourcePaths = [$source->path];
                 $job->update(['progress' => 30]);
             }
@@ -88,6 +103,10 @@ class RunBackup implements ShouldQueue
             $archiveName = $safeName.'-'.now()->format('Ymd\THis');
 
             // Run backup
+            $log->section('Borg backup');
+            $log->line("Archive: {$archiveName}");
+            $log->line("Compression: ".($plan->compression ?? 'lz4'));
+
             $result = $engine->backup(
                 $repoPath,
                 $sourcePaths,
@@ -96,6 +115,12 @@ class RunBackup implements ShouldQueue
             );
 
             $job->update(['progress' => 85]);
+            $log->line("Backup completed successfully");
+            $log->line("Original size: {$result->sizeOriginal}");
+            $log->line("Deduplicated size: {$result->sizeDedup}");
+            $log->line("Compressed size: {$result->sizeCompressed}");
+            $log->line("Files: {$result->fileCount}");
+            $log->line("Duration: {$result->durationSeconds}s");
 
             // Create archive record
             Archive::create([
@@ -123,8 +148,14 @@ class RunBackup implements ShouldQueue
             ]);
 
             $plan->update(['status' => 'healthy', 'last_run' => now()]);
+            $log->section('Completed');
+            $log->line('Backup finished successfully.');
+            $log->close();
 
         } catch (\Throwable $e) {
+            $log->error($e);
+            $log->close();
+
             $job->update([
                 'status' => 'failed',
                 'finished_at' => now(),

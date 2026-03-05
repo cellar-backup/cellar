@@ -6,6 +6,7 @@ use App\Models\Archive;
 use App\Models\Job;
 use App\Services\DatabaseRestorer;
 use App\Services\Engines\BorgEngine;
+use App\Services\JobLogger;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -44,31 +45,45 @@ class RunRestore implements ShouldQueue
         ]);
 
         $tmpDir = sys_get_temp_dir().'/cellar_restore_'.Str::random(8);
+        $log = new JobLogger($job);
 
         try {
+            $log->section('Initializing restore');
+            $log->line("Plan: {$plan->name}");
+            $log->line("Archive: {$archive->archive_id}");
+            $log->line("Source: {$source->display_label}");
+
             $engine = new BorgEngine(config('cellar.borg_path', '/usr/bin/borg'));
             $repoPath = rtrim($repo->config['path'] ?? '/data/repositories', '/').'/'.$plan->id;
 
             // 1. Extract archive to temp directory
             mkdir($tmpDir, 0755, true);
             $job->update(['progress' => 15]);
+            $log->section('Extracting archive');
             $result = $engine->restore($repoPath, $archive->archive_id, $tmpDir);
 
             if (! $result->success) {
+                $log->line("FAILED: {$result->message}");
                 throw new \RuntimeException('Borg extract failed: '.$result->message);
             }
 
+            $log->line("Extraction completed in {$result->durationSeconds}s");
             $job->update(['progress' => 50]);
 
             // 2. Find the dump file in the extracted content
             $dumpFile = self::findDumpFile($tmpDir);
             if (! $dumpFile) {
+                $log->line('No database dump file found in archive.');
                 throw new \RuntimeException('No database dump file found in archive.');
             }
+            $log->line('Found dump file: '.basename($dumpFile));
 
             // 3. Restore dump into the source database
             $job->update(['progress' => 60]);
             if ($source->getIsDatabase()) {
+                $log->section('Database restore');
+                $log->line("Restoring to {$source->source_type->value}: {$source->database_name}");
+
                 $restoreResult = DatabaseRestorer::restore(
                     $source->source_type->value,
                     [
@@ -82,8 +97,10 @@ class RunRestore implements ShouldQueue
                 );
 
                 if (! $restoreResult->success) {
+                    $log->line("FAILED: {$restoreResult->message}");
                     throw new \RuntimeException('Database restore failed: '.$restoreResult->message);
                 }
+                $log->line('Restore completed successfully.');
             }
 
             $job->update([
@@ -96,8 +113,14 @@ class RunRestore implements ShouldQueue
                     'duration' => $result->durationSeconds,
                 ],
             ]);
+            $log->section('Completed');
+            $log->line('Restore finished successfully.');
+            $log->close();
 
         } catch (\Throwable $e) {
+            $log->error($e);
+            $log->close();
+
             $job->update([
                 'status' => 'failed',
                 'finished_at' => now(),

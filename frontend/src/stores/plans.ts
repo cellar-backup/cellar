@@ -49,6 +49,7 @@ export interface Archive {
   size_dedup: number;
   size_compressed: number;
   file_count: number;
+  keep_forever: boolean;
   created_at: string;
 }
 
@@ -149,21 +150,30 @@ export const usePlansStore = defineStore("plans", () => {
 
   async function triggerBackup(planId: string) {
     const { data } = await api.post(`/plans/${planId}/backup`);
+    // Re-fetch immediately so running state + progress appear
+    setTimeout(() => fetchPlans(), 500);
+    startPolling();
     return data;
   }
 
   async function triggerPrune(planId: string) {
     const { data } = await api.post(`/plans/${planId}/prune`);
+    setTimeout(() => fetchPlans(), 500);
+    startPolling();
     return data;
   }
 
   async function triggerVerify(planId: string) {
     const { data } = await api.post(`/plans/${planId}/verify`);
+    setTimeout(() => fetchPlans(), 500);
+    startPolling();
     return data;
   }
 
   async function triggerRestore(archiveId: string) {
     const { data } = await api.post(`/archives/${archiveId}/restore`);
+    setTimeout(() => fetchPlans(), 500);
+    startPolling();
     return data;
   }
 
@@ -211,6 +221,23 @@ export const usePlansStore = defineStore("plans", () => {
     URL.revokeObjectURL(url);
   }
 
+  async function fetchJobLog(
+    jobId: string,
+  ): Promise<{ content: string | null; message?: string }> {
+    const { data } = await api.get(`/jobs/${jobId}/log`);
+    return data;
+  }
+
+  async function toggleKeepForever(
+    archiveId: string,
+    keepForever: boolean,
+  ): Promise<void> {
+    await api.patch(`/archives/${archiveId}/keep-forever`, {
+      keep_forever: keepForever,
+    });
+    await fetchArchives();
+  }
+
   return {
     plans,
     jobs,
@@ -229,6 +256,8 @@ export const usePlansStore = defineStore("plans", () => {
     triggerVerify,
     triggerRestore,
     downloadArchive,
+    fetchJobLog,
+    toggleKeepForever,
     startPolling,
     stopPolling,
   };

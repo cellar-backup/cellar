@@ -82,6 +82,7 @@ class DatabaseDumper
             '-h', $host,
             '-P', $port,
             '-u', $user,
+            '--skip-ssl',
             '--single-transaction',
             '--routines',
             '--triggers',

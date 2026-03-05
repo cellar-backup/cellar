@@ -1,13 +1,27 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 import { usePlansStore } from "@/stores/plans";
-import { Clock, CircleCheck, CircleX, Loader2 } from "lucide-vue-next";
+import {
+  Clock,
+  CircleCheck,
+  CircleX,
+  Loader2,
+  FileText,
+  X,
+} from "lucide-vue-next";
 
 const store = usePlansStore();
 
 // Live elapsed time ticker
 const now = ref(Date.now());
 let tickTimer: ReturnType<typeof setInterval> | null = null;
+
+// Log viewer state
+const showLog = ref(false);
+const logContent = ref<string | null>(null);
+const logLoading = ref(false);
+const logJobId = ref<string | null>(null);
+const logJobLabel = ref("");
 
 onMounted(() => {
   store.fetchJobs();
@@ -20,6 +34,29 @@ onUnmounted(() => {
   store.stopPolling();
   if (tickTimer) clearInterval(tickTimer);
 });
+
+async function openLog(jobId: string, label: string) {
+  logJobId.value = jobId;
+  logJobLabel.value = label;
+  logContent.value = null;
+  logLoading.value = true;
+  showLog.value = true;
+
+  try {
+    const result = await store.fetchJobLog(jobId);
+    logContent.value = result.content;
+  } catch {
+    logContent.value = "Failed to load log.";
+  } finally {
+    logLoading.value = false;
+  }
+}
+
+function closeLog() {
+  showLog.value = false;
+  logContent.value = null;
+  logJobId.value = null;
+}
 
 function statusIcon(status: string) {
   switch (status) {
@@ -133,6 +170,7 @@ function duration(start: string | null, end: string | null) {
             <th class="px-5 py-3 font-medium">Duration</th>
             <th class="px-5 py-3 font-medium">Progress</th>
             <th class="px-5 py-3 font-medium">Message</th>
+            <th class="px-5 py-3 font-medium w-16"></th>
           </tr>
         </thead>
         <tbody>
@@ -196,9 +234,74 @@ function duration(start: string | null, end: string | null) {
             <td class="px-5 py-3 max-w-xs truncate text-text-muted">
               {{ job.error_message || "—" }}
             </td>
+            <td class="px-5 py-3">
+              <button
+                class="rounded p-1 text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors"
+                title="View log"
+                @click="
+                  openLog(
+                    job.id,
+                    `${typeLabel(job.job_type)} — ${job.plan_name ?? 'Unknown'}`,
+                  )
+                "
+              >
+                <FileText class="h-4 w-4" />
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
     </div>
+
+    <!-- ======== Log Viewer Modal ======== -->
+    <Teleport to="body">
+      <div
+        v-if="showLog"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        @click.self="closeLog"
+      >
+        <div
+          class="w-full max-w-3xl max-h-[80vh] flex flex-col rounded-2xl border border-border bg-surface shadow-xl"
+        >
+          <!-- Header -->
+          <div
+            class="flex items-center justify-between border-b border-border px-6 py-4"
+          >
+            <div class="flex items-center gap-3">
+              <FileText class="h-5 w-5 text-text-muted" />
+              <div>
+                <h2 class="text-sm font-semibold text-text-primary">Job Log</h2>
+                <p class="text-xs text-text-muted">{{ logJobLabel }}</p>
+              </div>
+            </div>
+            <button
+              class="rounded-lg p-1 text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors"
+              @click="closeLog"
+            >
+              <X class="h-5 w-5" />
+            </button>
+          </div>
+
+          <!-- Content -->
+          <div class="flex-1 overflow-auto p-6">
+            <div
+              v-if="logLoading"
+              class="flex items-center gap-2 text-text-muted"
+            >
+              <Loader2 class="h-4 w-4 animate-spin" />
+              Loading log…
+            </div>
+            <pre
+              v-else-if="logContent"
+              class="whitespace-pre-wrap break-words text-xs font-mono leading-relaxed text-text-primary bg-surface-raised rounded-lg p-4 max-h-[60vh] overflow-auto"
+              >{{ logContent }}</pre
+            >
+            <p v-else class="text-sm text-text-muted">
+              No log available for this job.
+            </p>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

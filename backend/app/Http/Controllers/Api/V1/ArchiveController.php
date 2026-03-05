@@ -49,6 +49,26 @@ class ArchiveController extends Controller
         return response()->json(null, 204);
     }
 
+    // ── Keep Forever ───────────────────────────────────────────
+
+    /**
+     * PATCH /archives/{archive}/keep-forever
+     *
+     * Toggle the keep_forever flag on an archive.
+     */
+    public function keepForever(Archive $archive, Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'keep_forever' => 'required|boolean',
+        ]);
+
+        $archive->update(['keep_forever' => $data['keep_forever']]);
+
+        return response()->json(array_merge($archive->fresh()->toArray(), [
+            'plan_name' => $archive->plan_name,
+        ]));
+    }
+
     // ── Restore ────────────────────────────────────────────────
 
     /**

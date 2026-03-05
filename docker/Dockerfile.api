@@ -44,8 +44,8 @@ COPY backend/ .
 RUN composer dump-autoload --optimize
 
 # Create data directories
-RUN mkdir -p /app/data /data/repositories /var/log/cellar storage/framework/{cache,sessions,testing,views} \
-    && chown -R www-data:www-data /app/data /data/repositories storage bootstrap/cache
+RUN mkdir -p /app/data /data/repositories /var/log/cellar/jobs storage/framework/{cache,sessions,testing,views} \
+    && chown -R www-data:www-data /app/data /data/repositories /var/log/cellar storage bootstrap/cache
 
 # Entrypoint
 COPY docker/entrypoint.sh /entrypoint.sh

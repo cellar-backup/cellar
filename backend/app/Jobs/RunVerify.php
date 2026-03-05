@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\BackupPlan;
 use App\Models\Job;
 use App\Services\Engines\BorgEngine;
+use App\Services\JobLogger;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -37,12 +38,25 @@ class RunVerify implements ShouldQueue
             'progress' => 5,
         ]);
 
+        $log = new JobLogger($job);
+
         try {
+            $log->section('Initializing verification');
+            $log->line("Plan: {$plan->name}");
+            if ($this->archiveId) {
+                $log->line("Archive: {$this->archiveId}");
+            } else {
+                $log->line('Verifying entire repository.');
+            }
+
             $engine = new BorgEngine(config('cellar.borg_path', '/usr/bin/borg'));
             $repoPath = rtrim($plan->repository->config['path'] ?? '/data/repositories', '/').'/'.$plan->id;
 
             $job->update(['progress' => 20]);
+            $log->section('Running borg check');
             $passed = $engine->verify($repoPath, $this->archiveId);
+
+            $log->line($passed ? 'Verification PASSED.' : 'Verification FAILED.');
 
             $job->update([
                 'status' => $passed ? 'success' : 'failed',
@@ -54,8 +68,13 @@ class RunVerify implements ShouldQueue
                     'passed' => $passed,
                 ],
             ]);
+            $log->section('Completed');
+            $log->close();
 
         } catch (\Throwable $e) {
+            $log->error($e);
+            $log->close();
+
             $job->update([
                 'status' => 'failed',
                 'finished_at' => now(),

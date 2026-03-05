@@ -282,14 +282,14 @@ function closeImport() {
               {{ plan.running_job.job_type }} in progress…
             </span>
             <span class="text-text-muted tabular-nums">
-              {{ plan.running_job.progress }}% ·
+              {{ plan.running_job.progress ?? 0 }}% ·
               {{ elapsed(plan.running_job.started_at) }}
             </span>
           </div>
           <div class="h-1.5 w-full overflow-hidden rounded-full bg-info/10">
             <div
               class="h-full rounded-full bg-info transition-all duration-500 ease-out"
-              :style="{ width: plan.running_job.progress + '%' }"
+              :style="{ width: (plan.running_job.progress ?? 0) + '%' }"
             />
           </div>
         </div>

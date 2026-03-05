@@ -7,6 +7,8 @@ import {
   RotateCcw,
   Download,
   Loader2,
+  Pin,
+  PinOff,
 } from "lucide-vue-next";
 
 const store = usePlansStore();
@@ -88,6 +90,24 @@ function fmtSize(bytes: number | null) {
   }
   return `${size.toFixed(1)} ${units[i]}`;
 }
+
+const pinLoading = ref<string | null>(null);
+
+async function togglePin(arc: { id: string; keep_forever: boolean }) {
+  pinLoading.value = arc.id;
+  try {
+    await store.toggleKeepForever(arc.id, !arc.keep_forever);
+    arc.keep_forever = !arc.keep_forever;
+  } catch {
+    actionMessage.value = {
+      archiveId: arc.id,
+      text: "Failed to update pin status.",
+      ok: false,
+    };
+  } finally {
+    pinLoading.value = null;
+  }
+}
 </script>
 
 <template>
@@ -143,6 +163,12 @@ function fmtSize(bytes: number | null) {
               <div class="flex items-center gap-2">
                 <HardDrive class="h-4 w-4 text-text-muted" />
                 {{ arc.archive_id ?? arc.id }}
+                <span
+                  v-if="arc.keep_forever"
+                  class="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-500"
+                >
+                  <Pin class="h-2.5 w-2.5" /> Pinned
+                </span>
               </div>
             </td>
             <td class="px-5 py-3 text-text-muted">
@@ -159,6 +185,25 @@ function fmtSize(bytes: number | null) {
             </td>
             <td class="px-5 py-3 text-right">
               <div class="flex items-center justify-end gap-1.5">
+                <button
+                  :disabled="pinLoading === arc.id"
+                  class="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
+                  :class="
+                    arc.keep_forever
+                      ? 'border-amber-500/30 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'
+                      : 'border-border text-text-muted hover:bg-surface-raised'
+                  "
+                  :title="
+                    arc.keep_forever
+                      ? 'Unpin — allow pruning'
+                      : 'Pin — keep forever'
+                  "
+                  @click="togglePin(arc)"
+                >
+                  <Pin v-if="!arc.keep_forever" class="h-3.5 w-3.5" />
+                  <PinOff v-else class="h-3.5 w-3.5" />
+                  {{ arc.keep_forever ? "Unpin" : "Pin" }}
+                </button>
                 <button
                   :disabled="actionLoading === arc.id"
                   class="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"

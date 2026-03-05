@@ -19,6 +19,7 @@ return new class extends Migration
             $table->integer('duration')->nullable()->comment('Duration in seconds');
             $table->bigInteger('file_count')->default(0);
             $table->json('metadata')->default('{}');
+            $table->boolean('keep_forever')->default(false);
             $table->timestamp('created_at')->useCurrent();
 
             $table->unique(['plan_id', 'archive_id']);

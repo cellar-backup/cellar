@@ -22,6 +22,7 @@ class Archive extends Model
         'duration',
         'file_count',
         'metadata',
+        'keep_forever',
         'created_at',
     ];
 
@@ -35,6 +36,7 @@ class Archive extends Model
             'duration' => 'integer',
             'file_count' => 'integer',
             'metadata' => 'array',
+            'keep_forever' => 'boolean',
             'created_at' => 'datetime',
         ];
     }
