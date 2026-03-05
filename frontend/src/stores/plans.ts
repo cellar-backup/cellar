@@ -184,6 +184,8 @@ export const usePlansStore = defineStore("plans", () => {
     startedAt: string | null;
     finishedAt: string | null;
     errorMessage: string | null;
+    planName?: string;
+    createdAt?: string;
   }) {
     const plan = plans.value.find((p) => p.id === event.planId);
 
@@ -203,11 +205,26 @@ export const usePlansStore = defineStore("plans", () => {
         }
       }
 
-      // Also patch the jobs list if loaded
+      // Also patch the jobs list if loaded, or insert a new row
       const job = jobs.value.find((j) => j.id === event.jobId);
       if (job) {
         job.progress = event.progress;
         job.status = event.status;
+      } else {
+        // New job not yet in the list — add it so JobsView shows it immediately
+        jobs.value.unshift({
+          id: event.jobId,
+          plan: event.planId,
+          plan_name: event.planName ?? '',
+          job_type: event.jobType,
+          status: event.status,
+          progress: event.progress,
+          started_at: event.startedAt,
+          finished_at: event.finishedAt,
+          error_message: event.errorMessage ?? '',
+          metadata: {},
+          created_at: event.createdAt ?? new Date().toISOString(),
+        });
       }
     } else {
       // Terminal status (success, failed) — fetch full state from API
