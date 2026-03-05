@@ -23,6 +23,8 @@ class Archive extends Model
         'file_count',
         'metadata',
         'keep_forever',
+        'tags',
+        'notes',
         'created_at',
     ];
 
@@ -37,6 +39,7 @@ class Archive extends Model
             'file_count' => 'integer',
             'metadata' => 'array',
             'keep_forever' => 'boolean',
+            'tags' => 'array',
             'created_at' => 'datetime',
         ];
     }

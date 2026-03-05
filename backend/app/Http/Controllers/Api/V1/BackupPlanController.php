@@ -159,4 +159,16 @@ class BackupPlanController extends Controller
             'detail' => 'Verify job queued.',
         ], 202);
     }
+
+    // ── Toggle schedule_enabled ────────────────────────────────
+
+    public function toggle(BackupPlan $plan): JsonResponse
+    {
+        $plan->update(['schedule_enabled' => ! $plan->schedule_enabled]);
+
+        return response()->json([
+            'schedule_enabled' => $plan->schedule_enabled,
+            'message' => $plan->schedule_enabled ? 'Policy enabled.' : 'Policy paused.',
+        ]);
+    }
 }

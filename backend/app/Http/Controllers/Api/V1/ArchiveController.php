@@ -49,6 +49,24 @@ class ArchiveController extends Controller
         return response()->json(null, 204);
     }
 
+    // ── Update (tags, notes, keep_forever) ─────────────────────
+
+    public function update(Archive $archive, Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'tags' => 'nullable|array',
+            'tags.*' => 'string|max:50',
+            'notes' => 'nullable|string|max:2000',
+            'keep_forever' => 'nullable|boolean',
+        ]);
+
+        $archive->update($data);
+
+        return response()->json(array_merge($archive->fresh()->toArray(), [
+            'plan_name' => $archive->plan_name,
+        ]));
+    }
+
     // ── Keep Forever ───────────────────────────────────────────
 
     /**

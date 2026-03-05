@@ -336,9 +336,7 @@ export const usePlansStore = defineStore("plans", () => {
     if (job) {
       job.status = "cancelled";
     }
-    const plan = plans.value.find(
-      (p) => p.running_job?.id === jobId,
-    );
+    const plan = plans.value.find((p) => p.running_job?.id === jobId);
     if (plan) {
       plan.running_job = null;
       plan.status = "idle";

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Archive;
 use App\Models\BackupPlan;
+use App\Models\Job;
 use App\Models\Repository;
 use App\Models\Source;
 use Illuminate\Http\JsonResponse;
@@ -14,13 +16,23 @@ class SourceController extends Controller
 {
     public function index(): JsonResponse
     {
-        $sources = Source::orderByDesc('created_at')->get()->map(function (Source $s) {
-            $data = $s->toArray();
-            $data['display_label'] = $s->display_label;
-            $data['is_database'] = $s->getIsDatabase();
+        $sources = Source::withCount('backupPlans')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function (Source $s) {
+                $planIds = $s->backupPlans()->pluck('id');
+                $archiveCount = Archive::whereIn('plan_id', $planIds)->count();
+                $lastArchive = Archive::whereIn('plan_id', $planIds)->max('timestamp');
 
-            return $data;
-        });
+                $data = $s->toArray();
+                $data['display_label'] = $s->display_label;
+                $data['is_database'] = $s->getIsDatabase();
+                $data['policy_count'] = $s->backup_plans_count;
+                $data['archive_count'] = $archiveCount;
+                $data['last_archive_at'] = $lastArchive;
+
+                return $data;
+            });
 
         return response()->json($sources);
     }
@@ -200,5 +212,77 @@ class SourceController extends Controller
                 ? 'Connection successful.'
                 : 'Connection failed: '.$result->errorOutput(),
         ], $ok ? 200 : 422);
+    }
+
+    // ── Toggle enabled ─────────────────────────────────────────
+
+    public function toggle(Source $source): JsonResponse
+    {
+        $source->update(['enabled' => ! $source->enabled]);
+
+        return response()->json([
+            'enabled' => $source->enabled,
+            'message' => $source->enabled ? 'Source enabled.' : 'Source disabled — policies will not execute.',
+        ]);
+    }
+
+    // ── Policies (backup plans for this source) ────────────────
+
+    public function policies(Source $source): JsonResponse
+    {
+        $plans = BackupPlan::with('repository')
+            ->where('source_id', $source->id)
+            ->orderByDesc('updated_at')
+            ->get();
+
+        $runningJobs = Job::where('status', 'running')
+            ->whereIn('plan_id', $plans->pluck('id'))
+            ->get()
+            ->keyBy('plan_id');
+
+        $result = $plans->map(function (BackupPlan $p) use ($runningJobs) {
+            $runningJob = $runningJobs->get($p->id);
+
+            return [
+                'id' => $p->id,
+                'name' => $p->name,
+                'repository_name' => $p->repository_name,
+                'engine' => $p->engine,
+                'status' => $p->status,
+                'schedule_cron' => $p->schedule_cron,
+                'schedule_enabled' => $p->schedule_enabled,
+                'retention_policy' => $p->retention_policy,
+                'last_run' => $p->last_run,
+                'next_run' => $p->next_run,
+                'running_job' => $runningJob ? [
+                    'id' => $runningJob->id,
+                    'job_type' => $runningJob->job_type,
+                    'progress' => $runningJob->progress,
+                    'started_at' => $runningJob->started_at,
+                ] : null,
+            ];
+        });
+
+        return response()->json($result);
+    }
+
+    // ── Archives (timeline) ────────────────────────────────────
+
+    public function archives(Source $source): JsonResponse
+    {
+        $planIds = $source->backupPlans()->pluck('id');
+
+        $archives = Archive::with('plan')
+            ->whereIn('plan_id', $planIds)
+            ->orderByDesc('timestamp')
+            ->get()
+            ->map(function (Archive $a) {
+                $data = $a->toArray();
+                $data['plan_name'] = $a->plan_name;
+
+                return $data;
+            });
+
+        return response()->json($archives);
     }
 }

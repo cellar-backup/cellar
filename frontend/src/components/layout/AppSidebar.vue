@@ -5,8 +5,6 @@ import { useAuthStore } from "@/stores/auth";
 import {
   LayoutDashboard,
   Database,
-  Archive,
-  ClipboardList,
   ScrollText,
   Radar,
   Settings,
@@ -23,8 +21,6 @@ const auth = useAuthStore();
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, to: "/" },
   { label: "Sources", icon: Database, to: "/sources" },
-  { label: "Backup Plans", icon: ClipboardList, to: "/plans" },
-  { label: "Archives", icon: Archive, to: "/archives" },
   { label: "Jobs", icon: ScrollText, to: "/jobs" },
   { label: "Radar", icon: Radar, to: "/radar" },
   { label: "Settings", icon: Settings, to: "/settings" },

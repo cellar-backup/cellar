@@ -46,13 +46,17 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('sources', SourceController::class);
         Route::post('sources/quick-add', [SourceController::class, 'quickAdd']);
         Route::post('sources/{source}/test-connection', [SourceController::class, 'testConnection']);
+        Route::patch('sources/{source}/toggle', [SourceController::class, 'toggle']);
+        Route::get('sources/{source}/policies', [SourceController::class, 'policies']);
+        Route::get('sources/{source}/archives', [SourceController::class, 'archives']);
 
-        // Backup Plans
+        // Backup Plans (Policies)
         Route::apiResource('plans', BackupPlanController::class);
         Route::post('plans/{plan}/backup', [BackupPlanController::class, 'backup']);
         Route::post('plans/{plan}/restore', [BackupPlanController::class, 'restore']);
         Route::post('plans/{plan}/prune', [BackupPlanController::class, 'prune']);
         Route::post('plans/{plan}/verify', [BackupPlanController::class, 'verify']);
+        Route::patch('plans/{plan}/toggle', [BackupPlanController::class, 'toggle']);
 
         // Jobs
         Route::get('jobs', [JobController::class, 'index']);
@@ -63,6 +67,7 @@ Route::prefix('v1')->group(function () {
         // Archives
         Route::get('archives', [ArchiveController::class, 'index']);
         Route::get('archives/{archive}', [ArchiveController::class, 'show']);
+        Route::patch('archives/{archive}', [ArchiveController::class, 'update']);
         Route::delete('archives/{archive}', [ArchiveController::class, 'destroy']);
         Route::patch('archives/{archive}/keep-forever', [ArchiveController::class, 'keepForever']);
         Route::post('archives/{archive}/restore', [ArchiveController::class, 'restore']);
