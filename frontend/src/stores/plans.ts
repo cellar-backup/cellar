@@ -215,13 +215,13 @@ export const usePlansStore = defineStore("plans", () => {
         jobs.value.unshift({
           id: event.jobId,
           plan: event.planId,
-          plan_name: event.planName ?? '',
+          plan_name: event.planName ?? "",
           job_type: event.jobType,
           status: event.status,
           progress: event.progress,
           started_at: event.startedAt,
           finished_at: event.finishedAt,
-          error_message: event.errorMessage ?? '',
+          error_message: event.errorMessage ?? "",
           metadata: {},
           created_at: event.createdAt ?? new Date().toISOString(),
         });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, nextTick } from "vue";
 import { usePlansStore } from "@/stores/plans";
 import { useJobsChannel } from "@/composables/useJobsChannel";
 import {
@@ -12,6 +12,8 @@ import {
   Loader2,
   Import,
   Square,
+  FileText,
+  X,
 } from "lucide-vue-next";
 
 const store = usePlansStore();
@@ -33,6 +35,7 @@ onUnmounted(() => {
     clearInterval(tickTimer);
     tickTimer = null;
   }
+  stopLogPolling();
 });
 
 function elapsed(startedAt: string | null) {
@@ -103,6 +106,10 @@ async function runVerify(planId: string) {
 }
 
 async function cancelRunning(planId: string, jobId: string) {
+  if (
+    !confirm("Cancel the running job? This action cannot be undone.")
+  )
+    return;
   actionLoading.value = planId;
   actionMessage.value = null;
   try {
@@ -117,6 +124,91 @@ async function cancelRunning(planId: string, jobId: string) {
   } finally {
     actionLoading.value = null;
   }
+}
+
+// ---- Log viewer ----
+const showLog = ref(false);
+const logContent = ref<string | null>(null);
+const logLoading = ref(false);
+const logJobId = ref<string | null>(null);
+const logJobLabel = ref("");
+const logJobRunning = ref(false);
+const logScrollArea = ref<HTMLElement | null>(null);
+let logPollTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopLogPolling() {
+  if (logPollTimer) {
+    clearInterval(logPollTimer);
+    logPollTimer = null;
+  }
+}
+
+function scrollLogToBottom() {
+  nextTick(() => {
+    if (logScrollArea.value) {
+      logScrollArea.value.scrollTop = logScrollArea.value.scrollHeight;
+    }
+  });
+}
+
+async function fetchLogContent() {
+  if (!logJobId.value) return;
+  try {
+    const result = await store.fetchJobLog(logJobId.value);
+    if (result.content !== null) {
+      const wasAtBottom =
+        logScrollArea.value &&
+        logScrollArea.value.scrollHeight -
+          logScrollArea.value.scrollTop -
+          logScrollArea.value.clientHeight <
+          50;
+      logContent.value = result.content;
+      if (wasAtBottom || logLoading.value) {
+        scrollLogToBottom();
+      }
+    } else if (!logContent.value) {
+      logContent.value = null;
+    }
+  } catch {
+    if (!logContent.value) {
+      logContent.value = "Failed to load log.";
+    }
+  }
+}
+
+async function openLog(jobId: string, label: string, isRunning: boolean) {
+  logJobId.value = jobId;
+  logJobLabel.value = label;
+  logJobRunning.value = isRunning;
+  logContent.value = null;
+  logLoading.value = true;
+  showLog.value = true;
+  stopLogPolling();
+
+  await fetchLogContent();
+  logLoading.value = false;
+
+  if (isRunning) {
+    logPollTimer = setInterval(async () => {
+      await fetchLogContent();
+      const plan = store.plans.find(
+        (p) => p.running_job?.id === jobId,
+      );
+      if (!plan) {
+        logJobRunning.value = false;
+        stopLogPolling();
+        await fetchLogContent();
+      }
+    }, 2000);
+  }
+}
+
+function closeLog() {
+  showLog.value = false;
+  logContent.value = null;
+  logJobId.value = null;
+  logJobRunning.value = false;
+  stopLogPolling();
 }
 
 function statusBadgeClass(status: string) {
@@ -317,6 +409,23 @@ function closeImport() {
                 }"
               />
             </div>
+            <div
+              v-if="plan.running_job.id !== '_pending'"
+              class="flex items-center gap-2"
+            >
+              <button
+                class="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors"
+                @click="
+                  openLog(
+                    plan.running_job?.id ?? '',
+                    (plan.running_job?.job_type ?? '') + ' — ' + plan.name,
+                    true,
+                  )
+                "
+              >
+                <FileText class="h-3 w-3" /> View Log
+              </button>
+            </div>
           </div>
         </Transition>
 
@@ -515,6 +624,63 @@ function closeImport() {
               </div>
             </form>
           </template>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ======== Log Viewer Modal ======== -->
+    <Teleport to="body">
+      <div
+        v-if="showLog"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        @click.self="closeLog"
+      >
+        <div
+          class="w-full max-w-3xl max-h-[80vh] flex flex-col rounded-2xl border border-border bg-surface shadow-xl"
+        >
+          <div
+            class="flex items-center justify-between border-b border-border px-6 py-4"
+          >
+            <div class="flex items-center gap-3">
+              <FileText class="h-5 w-5 text-text-muted" />
+              <div>
+                <h2 class="text-sm font-semibold text-text-primary">
+                  Job Log
+                </h2>
+                <p class="text-xs text-text-muted">{{ logJobLabel }}</p>
+              </div>
+            </div>
+            <button
+              class="rounded-lg p-1 text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors"
+              @click="closeLog"
+            >
+              <X class="h-5 w-5" />
+            </button>
+          </div>
+          <div ref="logScrollArea" class="flex-1 overflow-auto p-6">
+            <div
+              v-if="logLoading"
+              class="flex items-center gap-2 text-text-muted"
+            >
+              <Loader2 class="h-4 w-4 animate-spin" />
+              Loading log&hellip;
+            </div>
+            <pre
+              v-else-if="logContent"
+              class="whitespace-pre-wrap break-words text-xs font-mono leading-relaxed text-text-primary bg-surface-raised rounded-lg p-4 max-h-[60vh] overflow-auto"
+              >{{ logContent }}</pre
+            >
+            <p v-else class="text-sm text-text-muted">
+              No log available for this job yet.
+            </p>
+            <div
+              v-if="logJobRunning && !logLoading"
+              class="mt-3 flex items-center gap-2 text-xs text-info"
+            >
+              <Loader2 class="h-3.5 w-3.5 animate-spin" />
+              Live &mdash; updating every 2 seconds
+            </div>
+          </div>
         </div>
       </div>
     </Teleport>

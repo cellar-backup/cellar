@@ -195,6 +195,18 @@ function duration(start: string | null, end: string | null) {
   const rem = secs % 60;
   return `${mins}m ${rem}s`;
 }
+
+async function confirmCancel(jobId: string, jobType: string) {
+  if (
+    !confirm(
+      "Cancel the running " +
+        typeLabel(jobType) +
+        " job? This action cannot be undone.",
+    )
+  )
+    return;
+  await store.cancelJob(jobId);
+}
 </script>
 
 <template>
@@ -318,7 +330,7 @@ function duration(start: string | null, end: string | null) {
                   v-if="job.status === 'running' || job.status === 'pending'"
                   class="rounded p-1 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors"
                   title="Cancel job"
-                  @click="store.cancelJob(job.id)"
+                  @click="confirmCancel(job.id, job.job_type)"
                 >
                   <Ban class="h-4 w-4" />
                 </button>
