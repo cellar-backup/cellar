@@ -37,6 +37,13 @@ services:
       REDIS_HOST: cellar-redis
       QUEUE_CONNECTION: redis
       CACHE_STORE: redis
+      BROADCAST_CONNECTION: reverb
+      REVERB_APP_ID: cellar
+      REVERB_APP_KEY: cellar-key
+      REVERB_APP_SECRET: cellar-secret
+      REVERB_HOST: cellar-reverb
+      REVERB_PORT: 8080
+      REVERB_SCHEME: http
       SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:-localhost:8420,localhost}
     volumes:
       - cellar-data:/app/data
@@ -60,6 +67,13 @@ services:
       REDIS_HOST: cellar-redis
       QUEUE_CONNECTION: redis
       CACHE_STORE: redis
+      BROADCAST_CONNECTION: reverb
+      REVERB_APP_ID: cellar
+      REVERB_APP_KEY: cellar-key
+      REVERB_APP_SECRET: cellar-secret
+      REVERB_HOST: cellar-reverb
+      REVERB_PORT: 8080
+      REVERB_SCHEME: http
     volumes:
       - cellar-data:/app/data
       - cellar-repos:/data/repositories
@@ -85,6 +99,38 @@ services:
     volumes:
       - cellar-data:/app/data
 
+  # ---------- Reverb (WebSocket) ----------
+  cellar-reverb:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    command: php artisan reverb:start --host=0.0.0.0 --port=8080
+    depends_on:
+      cellar-api:
+        condition: service_started
+      cellar-redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: ${CELLAR_DEBUG:-false}
+      DB_DATABASE: /app/data/cellar.sqlite
+      REDIS_HOST: cellar-redis
+      QUEUE_CONNECTION: redis
+      CACHE_STORE: redis
+      BROADCAST_CONNECTION: reverb
+      REVERB_APP_ID: cellar
+      REVERB_APP_KEY: cellar-key
+      REVERB_APP_SECRET: cellar-secret
+      REVERB_HOST: cellar-reverb
+      REVERB_PORT: 8080
+      REVERB_SCHEME: http
+      REVERB_SERVER_HOST: 0.0.0.0
+      REVERB_SERVER_PORT: 8080
+      REVERB_SCALING_ENABLED: "true"
+    volumes:
+      - cellar-data:/app/data
+
   # ---------- Frontend ----------
   cellar-ui:
     build:
@@ -106,6 +152,7 @@ services:
     depends_on:
       - cellar-ui
       - cellar-api
+      - cellar-reverb
 
 volumes:
   cellar-data:

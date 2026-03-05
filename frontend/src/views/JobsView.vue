@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, nextTick } from "vue";
 import { usePlansStore, type Job } from "@/stores/plans";
+import { useJobsChannel } from "@/composables/useJobsChannel";
 import {
   Clock,
   CircleCheck,
@@ -11,6 +12,7 @@ import {
 } from "lucide-vue-next";
 
 const store = usePlansStore();
+useJobsChannel();
 
 // Live elapsed time ticker
 const now = ref(Date.now());
@@ -27,14 +29,12 @@ let logPollTimer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(() => {
   store.fetchJobs();
-  store.startPolling();
   tickTimer = setInterval(() => {
     now.value = Date.now();
   }, 1000);
 });
 
 onUnmounted(() => {
-  store.stopPolling();
   if (tickTimer) clearInterval(tickTimer);
   stopLogPolling();
 });
@@ -232,11 +232,11 @@ function duration(start: string | null, end: string | null) {
             <th class="px-5 py-3 font-medium w-16"></th>
           </tr>
         </thead>
-        <tbody>
+        <TransitionGroup name="table-row" tag="tbody">
           <tr
             v-for="job in store.jobs"
             :key="job.id"
-            class="border-b border-border last:border-none"
+            class="border-b border-border last:border-none transition-all duration-300"
           >
             <td class="px-5 py-3">
               <span
@@ -308,7 +308,7 @@ function duration(start: string | null, end: string | null) {
               </button>
             </td>
           </tr>
-        </tbody>
+        </TransitionGroup>
       </table>
     </div>
 
@@ -371,3 +371,19 @@ function duration(start: string | null, end: string | null) {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+.table-row-enter-active,
+.table-row-leave-active {
+  transition: all 0.3s ease;
+}
+.table-row-enter-from {
+  opacity: 0;
+}
+.table-row-leave-to {
+  opacity: 0;
+}
+.table-row-move {
+  transition: transform 0.3s ease;
+}
+</style>

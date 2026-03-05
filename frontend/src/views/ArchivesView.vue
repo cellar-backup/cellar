@@ -153,11 +153,11 @@ async function togglePin(arc: { id: string; keep_forever: boolean }) {
             <th class="px-5 py-3 font-medium text-right">Actions</th>
           </tr>
         </thead>
-        <tbody>
+        <TransitionGroup name="table-row" tag="tbody">
           <tr
             v-for="arc in store.archives"
             :key="arc.id"
-            class="border-b border-border last:border-none"
+            class="border-b border-border last:border-none transition-all duration-300"
           >
             <td class="px-5 py-3 font-medium text-text-primary">
               <div class="flex items-center gap-2">
@@ -238,8 +238,24 @@ async function togglePin(arc: { id: string; keep_forever: boolean }) {
               </div>
             </td>
           </tr>
-        </tbody>
+        </TransitionGroup>
       </table>
     </div>
   </div>
 </template>
+
+<style scoped>
+.table-row-enter-active,
+.table-row-leave-active {
+  transition: all 0.3s ease;
+}
+.table-row-enter-from {
+  opacity: 0;
+}
+.table-row-leave-to {
+  opacity: 0;
+}
+.table-row-move {
+  transition: transform 0.3s ease;
+}
+</style>

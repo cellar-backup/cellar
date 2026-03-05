@@ -322,11 +322,11 @@ async function editDeleteSource() {
     </div>
 
     <!-- Source list -->
-    <div v-else class="mt-6 space-y-3">
+    <TransitionGroup name="list-item" tag="div" v-else class="mt-6 space-y-3">
       <div
         v-for="source in store.sources"
         :key="source.id"
-        class="flex items-center justify-between rounded-xl border border-border bg-surface p-4 hover:border-primary/30 transition-colors cursor-pointer"
+        class="flex items-center justify-between rounded-xl border border-border bg-surface p-4 hover:border-primary/30 transition-all duration-300 cursor-pointer"
         @click="openEdit(source.id)"
       >
         <div class="flex items-center gap-4">
@@ -387,7 +387,7 @@ async function editDeleteSource() {
           </button>
         </div>
       </div>
-    </div>
+    </TransitionGroup>
 
     <!-- ======== Edit Source Modal ======== -->
     <Teleport to="body">
@@ -882,3 +882,21 @@ async function editDeleteSource() {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+.list-item-enter-active,
+.list-item-leave-active {
+  transition: all 0.3s ease;
+}
+.list-item-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+.list-item-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.list-item-move {
+  transition: transform 0.3s ease;
+}
+</style>

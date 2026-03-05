@@ -3,6 +3,7 @@ import { onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
 import { useSourcesStore } from "@/stores/sources";
 import { usePlansStore } from "@/stores/plans";
+import { useJobsChannel } from "@/composables/useJobsChannel";
 import { formatBytes } from "@/lib/utils";
 import {
   Database,
@@ -18,6 +19,7 @@ import {
 const router = useRouter();
 const sourcesStore = useSourcesStore();
 const plansStore = usePlansStore();
+useJobsChannel();
 
 onMounted(() => {
   sourcesStore.fetchSources();
@@ -102,11 +104,15 @@ function timeAgo(dateStr: string | null) {
     </div>
 
     <!-- Stat cards -->
-    <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <TransitionGroup
+      name="list-item"
+      tag="div"
+      class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+    >
       <div
         v-for="stat in stats"
         :key="stat.label"
-        class="rounded-xl border border-border bg-surface p-5"
+        class="rounded-xl border border-border bg-surface p-5 transition-all duration-300"
       >
         <div class="flex items-center gap-3">
           <div
@@ -122,7 +128,7 @@ function timeAgo(dateStr: string | null) {
           </div>
         </div>
       </div>
-    </div>
+    </TransitionGroup>
 
     <!-- Empty state -->
     <div
@@ -157,11 +163,11 @@ function timeAgo(dateStr: string | null) {
               <th class="px-4 py-3 text-left font-medium">When</th>
             </tr>
           </thead>
-          <tbody>
+          <TransitionGroup name="table-row" tag="tbody">
             <tr
               v-for="job in recentJobs"
               :key="job.id"
-              class="border-b border-border last:border-0"
+              class="border-b border-border last:border-0 transition-all duration-300"
             >
               <td class="px-4 py-3">
                 <component
@@ -180,7 +186,7 @@ function timeAgo(dateStr: string | null) {
                 {{ timeAgo(job.started_at) }}
               </td>
             </tr>
-          </tbody>
+          </TransitionGroup>
         </table>
       </div>
     </div>
@@ -196,11 +202,15 @@ function timeAgo(dateStr: string | null) {
           View all &rarr;
         </button>
       </div>
-      <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <TransitionGroup
+        name="list-item"
+        tag="div"
+        class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+      >
         <div
           v-for="plan in plansStore.plans.slice(0, 6)"
           :key="plan.id"
-          class="rounded-xl border border-border bg-surface p-4"
+          class="rounded-xl border border-border bg-surface p-4 transition-all duration-300"
         >
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-medium text-text-primary truncate">
@@ -226,7 +236,39 @@ function timeAgo(dateStr: string | null) {
             Last run: {{ plan.last_run ? timeAgo(plan.last_run) : "never" }}
           </p>
         </div>
-      </div>
+      </TransitionGroup>
     </div>
   </div>
 </template>
+
+<style scoped>
+.list-item-enter-active,
+.list-item-leave-active {
+  transition: all 0.3s ease;
+}
+.list-item-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+.list-item-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.list-item-move {
+  transition: transform 0.3s ease;
+}
+
+.table-row-enter-active,
+.table-row-leave-active {
+  transition: all 0.3s ease;
+}
+.table-row-enter-from {
+  opacity: 0;
+}
+.table-row-leave-to {
+  opacity: 0;
+}
+.table-row-move {
+  transition: transform 0.3s ease;
+}
+</style>

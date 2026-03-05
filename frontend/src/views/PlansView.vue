@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 import { usePlansStore } from "@/stores/plans";
+import { useJobsChannel } from "@/composables/useJobsChannel";
 import {
   Play,
   Scissors,
@@ -13,6 +14,7 @@ import {
 } from "lucide-vue-next";
 
 const store = usePlansStore();
+useJobsChannel();
 
 // Live elapsed time ticker
 const now = ref(Date.now());
@@ -26,8 +28,10 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  store.stopPolling();
-  if (tickTimer) clearInterval(tickTimer);
+  if (tickTimer) {
+    clearInterval(tickTimer);
+    tickTimer = null;
+  }
 });
 
 function elapsed(startedAt: string | null) {
@@ -229,11 +233,11 @@ function closeImport() {
     </div>
 
     <!-- Plan list -->
-    <div v-else class="mt-6 space-y-4">
+    <TransitionGroup v-else name="plan-list" tag="div" class="mt-6 space-y-4">
       <div
         v-for="plan in store.plans"
         :key="plan.id"
-        class="rounded-xl border border-border bg-surface p-5"
+        class="rounded-xl border border-border bg-surface p-5 transition-all duration-300"
       >
         <div class="flex items-start justify-between">
           <div class="flex items-center gap-3">
@@ -258,7 +262,7 @@ function closeImport() {
           </div>
 
           <span
-            class="rounded-full px-2.5 py-0.5 text-xs font-medium"
+            class="rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors duration-300"
             :class="statusBadgeClass(plan.status)"
           >
             {{ plan.status }}
@@ -276,36 +280,42 @@ function closeImport() {
         </div>
 
         <!-- Progress bar (running jobs) -->
-        <div v-if="plan.running_job" class="mt-3 space-y-1.5">
-          <div class="flex items-center justify-between text-xs">
-            <span class="text-info font-medium capitalize">
-              {{ plan.running_job.job_type }} in progress…
-            </span>
-            <span class="text-text-muted tabular-nums">
-              {{ plan.running_job.progress ?? 0 }}% ·
-              {{ elapsed(plan.running_job.started_at) }}
-            </span>
+        <Transition name="progress-slide">
+          <div v-if="plan.running_job" class="mt-3 space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-info font-medium capitalize">
+                {{ plan.running_job.job_type }} in progress…
+              </span>
+              <span class="text-text-muted tabular-nums">
+                {{ plan.running_job.progress ?? 0 }}% ·
+                {{ elapsed(plan.running_job.started_at) }}
+              </span>
+            </div>
+            <div class="h-1.5 w-full overflow-hidden rounded-full bg-info/10">
+              <div
+                class="h-full rounded-full bg-info transition-all duration-700 ease-out"
+                :style="{
+                  width: Math.max(plan.running_job.progress ?? 0, 2) + '%',
+                }"
+              />
+            </div>
           </div>
-          <div class="h-1.5 w-full overflow-hidden rounded-full bg-info/10">
-            <div
-              class="h-full rounded-full bg-info transition-all duration-500 ease-out"
-              :style="{ width: (plan.running_job.progress ?? 0) + '%' }"
-            />
-          </div>
-        </div>
+        </Transition>
 
         <!-- Action message -->
-        <div
-          v-if="actionMessage?.planId === plan.id"
-          class="mt-3 rounded-lg px-3 py-2 text-sm"
-          :class="
-            actionMessage.ok
-              ? 'bg-success/10 text-success'
-              : 'bg-danger/10 text-danger'
-          "
-        >
-          {{ actionMessage.text }}
-        </div>
+        <Transition name="progress-slide">
+          <div
+            v-if="actionMessage?.planId === plan.id"
+            class="mt-3 rounded-lg px-3 py-2 text-sm"
+            :class="
+              actionMessage.ok
+                ? 'bg-success/10 text-success'
+                : 'bg-danger/10 text-danger'
+            "
+          >
+            {{ actionMessage.text }}
+          </div>
+        </Transition>
 
         <!-- Actions -->
         <div class="mt-4 flex items-center gap-2">
@@ -340,7 +350,7 @@ function closeImport() {
           />
         </div>
       </div>
-    </div>
+    </TransitionGroup>
 
     <!-- ======== Import Borg Repo Modal ======== -->
     <Teleport to="body">
@@ -482,3 +492,47 @@ function closeImport() {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+/* Plan list enter/leave */
+.plan-list-enter-active,
+.plan-list-leave-active {
+  transition: all 0.35s ease;
+}
+.plan-list-enter-from {
+  opacity: 0;
+  transform: translateY(-12px);
+}
+.plan-list-leave-to {
+  opacity: 0;
+  transform: translateY(12px);
+}
+.plan-list-move {
+  transition: transform 0.35s ease;
+}
+
+/* Progress bar slide in/out */
+.progress-slide-enter-active {
+  transition: all 0.35s ease-out;
+}
+.progress-slide-leave-active {
+  transition: all 0.25s ease-in;
+}
+.progress-slide-enter-from {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  transform: translateY(-6px);
+}
+.progress-slide-enter-to,
+.progress-slide-leave-from {
+  opacity: 1;
+  max-height: 60px;
+}
+.progress-slide-leave-to {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  transform: translateY(-6px);
+}
+</style>

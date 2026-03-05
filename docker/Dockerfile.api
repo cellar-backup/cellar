@@ -33,15 +33,15 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 
-# Install PHP dependencies
+# Install PHP dependencies (download only — cached layer when lock unchanged)
 COPY backend/composer.json backend/composer.lock ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
 # Application code
 COPY backend/ .
 
-# Finish composer (autoloader + post-install scripts)
-RUN composer dump-autoload --optimize
+# Finish composer: re-install to register all packages, generate autoloader, discover providers
+RUN composer install --no-dev --optimize-autoloader --prefer-dist
 
 # Create data directories
 RUN mkdir -p /app/data /data/repositories /var/log/cellar/jobs storage/framework/{cache,sessions,testing,views} \
