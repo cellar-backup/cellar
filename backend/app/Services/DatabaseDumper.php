@@ -104,6 +104,22 @@ class DatabaseDumper
         return trim($result->output()) ?: null;
     }
 
+    /**
+     * Detect whether a PostgreSQL database has the TimescaleDB extension installed.
+     */
+    private static function hasTimescaleDb(string $host, string $port, string $user, string $password, string $database): bool
+    {
+        $result = Process::timeout(15)
+            ->env(['PGPASSWORD' => $password])
+            ->run([
+                'psql', '-h', $host, '-p', $port, '-U', $user, '--no-password',
+                '-tAc', "SELECT 1 FROM pg_extension WHERE extname='timescaledb'",
+                $database,
+            ]);
+
+        return $result->successful() && str_contains(trim($result->output()), '1');
+    }
+
     private static function dumpPostgresql(array $c, string $outputDir): DumpResult
     {
         $host = $c['host'] ?? 'localhost';
@@ -114,13 +130,49 @@ class DatabaseDumper
         $database = $c['database'] ?? $c['database_name'] ?? 'postgres';
         $extra = $c['extra_args'] ?? [];
 
-        $outFile = "{$outputDir}/{$database}.sql.gz";
+        $isTimescale = self::hasTimescaleDb($host, $port, $user, $password, $database);
 
-        // Custom format (-Fc) for best borg dedup and compression
-        $cmd = ['pg_dump', '-h', $host, '-p', $port, '-U', $user, '--no-password', '-Fc', '-f', $outFile];
+        // Directory format (-Fd) with parallel jobs for large databases.
+        // Borg handles compression, so we disable pg_dump's internal
+        // compression (-Z 0) to avoid double-compressing and to speed up
+        // the dump significantly.
+        $outPath = "{$outputDir}/{$database}_dump";
+        $cmd = [
+            'pg_dump', '-h', $host, '-p', $port, '-U', $user, '--no-password',
+            '-Fd',          // directory format (enables parallel)
+            '-j', '4',      // 4 parallel worker jobs
+            '-Z', '0',      // no internal compression (borg will compress)
+        ];
+
+        // Standard best-practice flags: avoid permission issues on restore
+        $cmd[] = '--no-owner';
+        $cmd[] = '--no-privileges';
+
+        // Fail fast on lock contention instead of hanging
+        $cmd[] = '--lock-wait-timeout=60000'; // 60 seconds in ms
+
+        // TimescaleDB: exclude internal catalog schemas that contain circular
+        // FK constraints (hypertable ↔ chunk) which cause pg_dump to hang.
+        // These schemas are recreated by CREATE EXTENSION on restore.
+        if ($isTimescale) {
+            foreach ([
+                '_timescaledb_catalog',
+                '_timescaledb_cache',
+                '_timescaledb_config',
+                '_timescaledb_internal',
+                'timescaledb_information',
+                'timescaledb_experimental',
+            ] as $schema) {
+                $cmd[] = '-N';
+                $cmd[] = $schema;
+            }
+        }
+
+        $cmd[] = '-f';
+        $cmd[] = $outPath;
         $cmd = array_merge($cmd, (array) $extra, [$database]);
 
-        $result = Process::timeout(3600)
+        $result = Process::timeout(21600)
             ->env(['PGPASSWORD' => $password])
             ->run($cmd);
 
@@ -128,11 +180,23 @@ class DatabaseDumper
             return new DumpResult(false, message: 'pg_dump failed: '.$result->errorOutput());
         }
 
+        // Calculate total dump size (directory contains multiple files)
+        $totalSize = 0;
+        if (is_dir($outPath)) {
+            foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($outPath)) as $file) {
+                if ($file->isFile()) {
+                    $totalSize += $file->getSize();
+                }
+            }
+        }
+
         return new DumpResult(
             success: true,
-            dumpPath: $outFile,
-            sizeBytes: file_exists($outFile) ? filesize($outFile) : 0,
-            message: 'PostgreSQL dump completed.',
+            dumpPath: $outPath,
+            sizeBytes: $totalSize,
+            message: $isTimescale
+                ? 'PostgreSQL dump completed (TimescaleDB: internal schemas excluded, parallel directory format).'
+                : 'PostgreSQL dump completed (parallel directory format).',
         );
     }
 
@@ -166,13 +230,19 @@ class DatabaseDumper
 
         $cmd = array_merge($cmd, (array) $extra, [$database]);
 
-        $result = Process::timeout(3600)->run($cmd);
+        // Redirect output directly to file instead of buffering in PHP memory
+        $cmdParts = array_map('escapeshellarg', $cmd);
+        $fullCmd = implode(' ', $cmdParts).' > '.escapeshellarg($outFile);
+
+        $result = Process::timeout(21600)->run(['sh', '-c', $fullCmd]);
 
         if (! $result->successful()) {
             return new DumpResult(false, message: 'mysqldump failed: '.$result->errorOutput());
         }
 
-        file_put_contents($outFile, $result->output());
+        if (! file_exists($outFile) || filesize($outFile) === 0) {
+            return new DumpResult(false, message: 'mysqldump produced empty output.');
+        }
 
         return new DumpResult(
             success: true,
@@ -228,21 +298,23 @@ class DatabaseDumper
 
         $dumpCmd[] = $database;
 
-        // Prepend kubectl exec prefix
-        $cmd = array_merge(self::kubectlExecPrefix($kc), $dumpCmd);
+        // Prepend kubectl exec prefix — stream output directly to local
+        // file via shell redirect instead of buffering in PHP memory.
+        $kubectlParts = array_map('escapeshellarg', self::kubectlExecPrefix($kc));
+        $dumpParts = array_map('escapeshellarg', $dumpCmd);
+        $fullCmd = implode(' ', $kubectlParts)
+            .' '.implode(' ', $dumpParts)
+            .' > '.escapeshellarg($outFile);
 
-        $result = Process::timeout(3600)->run($cmd);
+        $result = Process::timeout(21600)->run(['sh', '-c', $fullCmd]);
 
         if (! $result->successful()) {
             return new DumpResult(false, message: 'mysqldump via kubectl exec failed: '.$result->errorOutput());
         }
 
-        $output = $result->output();
-        if (empty($output)) {
-            return new DumpResult(false, message: 'mysqldump via kubectl exec returned empty output.');
+        if (! file_exists($outFile) || filesize($outFile) === 0) {
+            return new DumpResult(false, message: 'mysqldump via kubectl exec produced empty output.');
         }
-
-        file_put_contents($outFile, $output);
 
         return new DumpResult(
             success: true,
@@ -261,41 +333,51 @@ class DatabaseDumper
 
         $outFile = "{$outputDir}/{$database}.sql.gz";
 
-        // PostgreSQL custom format (-Fc) outputs binary to stdout
-        $dumpCmd = [
-            'pg_dump',
-            '-U', $user,
-            '--no-password',
-            '-Fc',
-            $database,
-        ];
+        // Build pg_dump flags — detect TimescaleDB inside the pod
+        $tsCheckCmd = 'PGPASSWORD='.escapeshellarg($password)
+            .' psql -U '.escapeshellarg($user)
+            .' -tAc '."\"SELECT 1 FROM pg_extension WHERE extname='timescaledb'\""
+            .' '.escapeshellarg($database);
 
-        // Prepend kubectl exec, with PGPASSWORD env set inside the pod
-        // We wrap in sh -c to set the env var
+        $tsCheckFullCmd = array_merge(self::kubectlExecPrefix($kc), ['sh', '-c', $tsCheckCmd]);
+        $tsResult = Process::timeout(15)->run($tsCheckFullCmd);
+        $isTimescale = $tsResult->successful() && str_contains(trim($tsResult->output()), '1');
+
+        $excludeSchemas = $isTimescale
+            ? '-N _timescaledb_catalog -N _timescaledb_cache -N _timescaledb_config -N _timescaledb_internal -N timescaledb_information -N timescaledb_experimental'
+            : '';
+
+        // PostgreSQL custom format (-Fc) outputs binary to stdout.
+        // Stream directly to local file via shell redirect instead of
+        // buffering the entire dump in PHP memory (critical for large DBs).
         $shellCmd = 'PGPASSWORD='.escapeshellarg($password)
             .' pg_dump -U '.escapeshellarg($user)
-            .' --no-password -Fc '.escapeshellarg($database);
+            .' --no-password --no-owner --no-privileges --lock-wait-timeout=60000'
+            .($excludeSchemas ? ' '.$excludeSchemas : '')
+            .' -Fc '.escapeshellarg($database);
 
-        $cmd = array_merge(self::kubectlExecPrefix($kc), ['sh', '-c', $shellCmd]);
+        $kubectlParts = array_map('escapeshellarg', self::kubectlExecPrefix($kc));
+        $fullCmd = implode(' ', $kubectlParts)
+            .' -- sh -c '.escapeshellarg($shellCmd)
+            .' > '.escapeshellarg($outFile);
 
-        $result = Process::timeout(3600)->run($cmd);
+        $result = Process::timeout(21600)->run(['sh', '-c', $fullCmd]);
 
         if (! $result->successful()) {
             return new DumpResult(false, message: 'pg_dump via kubectl exec failed: '.$result->errorOutput());
         }
 
-        $output = $result->output();
-        if (empty($output)) {
-            return new DumpResult(false, message: 'pg_dump via kubectl exec returned empty output.');
+        if (! file_exists($outFile) || filesize($outFile) === 0) {
+            return new DumpResult(false, message: 'pg_dump via kubectl exec produced empty output.');
         }
-
-        file_put_contents($outFile, $output);
 
         return new DumpResult(
             success: true,
             dumpPath: $outFile,
             sizeBytes: file_exists($outFile) ? filesize($outFile) : 0,
-            message: 'PostgreSQL dump completed via kubectl exec (in-pod).',
+            message: $isTimescale
+                ? 'PostgreSQL dump completed via kubectl exec (TimescaleDB: internal schemas excluded).'
+                : 'PostgreSQL dump completed via kubectl exec (in-pod).',
         );
     }
 }

@@ -22,7 +22,12 @@ class RunBackup implements ShouldQueue
 
     public int $tries = 2;
 
-    public int $timeout = 7200;
+    /**
+     * Maximum job runtime in seconds.
+     * Large databases (e.g., 35 GB TimescaleDB) may need several hours
+     * for pg_dump over the network plus the subsequent borg archive.
+     */
+    public int $timeout = 28800; // 8 hours
 
     public function __construct(public string $planId) {}
 
@@ -90,22 +95,21 @@ class RunBackup implements ShouldQueue
                 $dumpResult = null;
                 $k8s = $source->extra_config['kubernetes'] ?? null;
 
-                // Try kubectl exec for K8s-sourced databases (runs dump inside the pod)
-                if ($k8s && ! empty($k8s['cluster_id']) && ! empty($k8s['namespace']) && ! empty($k8s['app_name'])) {
+                // Try direct network connection first — supports
+                // parallel directory-format dumps for large databases.
+                $log->line('Attempting direct network dump (parallel directory format)...');
+                $dumpResult = DatabaseDumper::dump(
+                    $source->source_type->value,
+                    $dbConfig,
+                    $tmpDir,
+                );
+
+                // Fall back to kubectl exec for K8s-sourced databases
+                // (useful when the database only accepts local connections)
+                if ((! $dumpResult || ! $dumpResult->success)
+                    && $k8s && ! empty($k8s['cluster_id']) && ! empty($k8s['namespace']) && ! empty($k8s['app_name'])) {
+                    $log->line('Direct dump failed, trying kubectl exec (in-pod dump)...');
                     $dumpResult = $this->tryKubectlDump($source, $dbConfig, $tmpDir, $k8s, $log);
-                }
-
-                // Fall back to direct network connection
-                if (! $dumpResult || ! $dumpResult->success) {
-                    if ($dumpResult) {
-                        $log->line("kubectl exec failed, trying direct connection...");
-                    }
-
-                    $dumpResult = DatabaseDumper::dump(
-                        $source->source_type->value,
-                        $dbConfig,
-                        $tmpDir,
-                    );
                 }
 
                 if (! $dumpResult->success) {
@@ -114,6 +118,7 @@ class RunBackup implements ShouldQueue
                 }
 
                 $log->line("Dump completed: {$dumpResult->dumpPath} ({$dumpResult->sizeBytes} bytes)");
+                $log->line("Info: {$dumpResult->message}");
                 if (str_contains($dumpResult->message, 'kubectl exec')) {
                     $log->line("Method: kubectl exec (in-pod dump)");
                 } else {

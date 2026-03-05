@@ -37,7 +37,7 @@ return [
                 'connection' => 'redis',
                 'queue' => ['default'],
                 'tries' => 2,
-                'timeout' => 7200,
+                'timeout' => 28800, // 8h — large databases may need hours
             ],
         ],
 
@@ -47,7 +47,7 @@ return [
                 'connection' => 'redis',
                 'queue' => ['default'],
                 'tries' => 2,
-                'timeout' => 7200,
+                'timeout' => 28800,
             ],
         ],
     ],
