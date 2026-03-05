@@ -62,6 +62,13 @@ class RunBackup implements ShouldQueue
 
             $job->update(['progress' => 10]);
 
+            // Check cancellation before starting heavy work
+            if ($job->isCancelled()) {
+                $log->line('Job cancelled by user.');
+                $log->close();
+                return;
+            }
+
             // Prepare source
             if ($source->getIsDatabase()) {
                 $tmpDir = sys_get_temp_dir().'/cellar_dump_'.Str::random(8);
@@ -119,6 +126,13 @@ class RunBackup implements ShouldQueue
                 $log->line("Path: {$source->path}");
                 $sourcePaths = [$source->path];
                 $job->update(['progress' => 30]);
+            }
+
+            // Check cancellation before borg backup
+            if ($job->isCancelled()) {
+                $log->line('Job cancelled by user.');
+                $log->close();
+                return;
             }
 
             // Build archive name

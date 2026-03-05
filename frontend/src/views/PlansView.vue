@@ -11,6 +11,7 @@ import {
   Clock,
   Loader2,
   Import,
+  Square,
 } from "lucide-vue-next";
 
 const store = usePlansStore();
@@ -94,6 +95,23 @@ async function runVerify(planId: string) {
     actionMessage.value = {
       planId,
       text: "Failed to trigger verify.",
+      ok: false,
+    };
+  } finally {
+    actionLoading.value = null;
+  }
+}
+
+async function cancelRunning(planId: string, jobId: string) {
+  actionLoading.value = planId;
+  actionMessage.value = null;
+  try {
+    await store.cancelJob(jobId);
+    actionMessage.value = { planId, text: "Job cancelled.", ok: true };
+  } catch {
+    actionMessage.value = {
+      planId,
+      text: "Failed to cancel job.",
       ok: false,
     };
   } finally {
@@ -348,6 +366,16 @@ function closeImport() {
             v-if="actionLoading === plan.id"
             class="ml-2 h-4 w-4 animate-spin text-text-muted"
           />
+
+          <button
+            v-if="plan.running_job && plan.running_job.id !== '_pending'"
+            :disabled="actionLoading === plan.id"
+            class="ml-auto flex items-center gap-1.5 rounded-lg border border-danger/30 px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
+            @click="cancelRunning(plan.id, plan.running_job.id)"
+          >
+            <Square class="h-3 w-3 fill-current" />
+            Cancel
+          </button>
         </div>
       </div>
     </TransitionGroup>

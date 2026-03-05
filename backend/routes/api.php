@@ -54,10 +54,11 @@ Route::prefix('v1')->group(function () {
         Route::post('plans/{plan}/prune', [BackupPlanController::class, 'prune']);
         Route::post('plans/{plan}/verify', [BackupPlanController::class, 'verify']);
 
-        // Jobs (read-only)
+        // Jobs
         Route::get('jobs', [JobController::class, 'index']);
         Route::get('jobs/{job}', [JobController::class, 'show']);
         Route::get('jobs/{job}/log', [JobController::class, 'log']);
+        Route::post('jobs/{job}/cancel', [JobController::class, 'cancel']);
 
         // Archives
         Route::get('archives', [ArchiveController::class, 'index']);

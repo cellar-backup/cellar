@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\JobStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Job;
 use App\Services\JobLogger;
@@ -65,4 +66,26 @@ class JobController extends Controller
             'log_path' => $job->log_path,
         ]);
     }
-}
+    public function cancel(Job $job): JsonResponse
+    {
+        if (! in_array($job->status, [JobStatus::Running, JobStatus::Pending])) {
+            return response()->json([
+                'detail' => 'Only running or pending jobs can be cancelled.',
+            ], 422);
+        }
+
+        $job->update([
+            'status' => 'cancelled',
+            'finished_at' => now(),
+            'error_message' => 'Cancelled by user.',
+        ]);
+
+        // Reset plan status so it no longer shows as running
+        if ($job->plan) {
+            $job->plan->update(['status' => 'idle']);
+        }
+
+        return response()->json([
+            'detail' => 'Job cancelled.',
+        ]);
+    }}

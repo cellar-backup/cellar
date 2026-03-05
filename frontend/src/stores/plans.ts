@@ -329,6 +329,23 @@ export const usePlansStore = defineStore("plans", () => {
     await fetchArchives();
   }
 
+  async function cancelJob(jobId: string): Promise<void> {
+    await api.post(`/jobs/${jobId}/cancel`);
+    // Optimistically clear running state
+    const job = jobs.value.find((j) => j.id === jobId);
+    if (job) {
+      job.status = "cancelled";
+    }
+    const plan = plans.value.find(
+      (p) => p.running_job?.id === jobId,
+    );
+    if (plan) {
+      plan.running_job = null;
+      plan.status = "idle";
+    }
+    await Promise.all([fetchPlans(), fetchJobs()]);
+  }
+
   return {
     plans,
     jobs,
@@ -349,6 +366,7 @@ export const usePlansStore = defineStore("plans", () => {
     downloadArchive,
     fetchJobLog,
     toggleKeepForever,
+    cancelJob,
     handleJobEvent,
   };
 });

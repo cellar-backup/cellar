@@ -9,6 +9,7 @@ import {
   Loader2,
   FileText,
   X,
+  Ban,
 } from "lucide-vue-next";
 
 const store = usePlansStore();
@@ -125,6 +126,8 @@ function statusIcon(status: string) {
       return CircleX;
     case "running":
       return Loader2;
+    case "cancelled":
+      return Ban;
     default:
       return Clock;
   }
@@ -138,6 +141,8 @@ function statusClass(status: string) {
       return "text-danger";
     case "running":
       return "text-info";
+    case "cancelled":
+      return "text-warning";
     default:
       return "text-text-muted";
   }
@@ -151,6 +156,8 @@ function badgeClass(status: string) {
       return "bg-danger/10 text-danger";
     case "running":
       return "bg-info/10 text-info";
+    case "cancelled":
+      return "bg-warning/10 text-warning";
     default:
       return "bg-surface-raised text-text-muted";
   }
@@ -294,18 +301,28 @@ function duration(start: string | null, end: string | null) {
               {{ job.error_message || "—" }}
             </td>
             <td class="px-5 py-3">
-              <button
-                class="rounded p-1 text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors"
-                title="View log"
-                @click="
-                  openLog(
-                    job.id,
-                    `${typeLabel(job.job_type)} — ${job.plan_name ?? 'Unknown'}`,
-                  )
-                "
-              >
-                <FileText class="h-4 w-4" />
-              </button>
+              <div class="flex items-center gap-1">
+                <button
+                  class="rounded p-1 text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors"
+                  title="View log"
+                  @click="
+                    openLog(
+                      job.id,
+                      `${typeLabel(job.job_type)} — ${job.plan_name ?? 'Unknown'}`,
+                    )
+                  "
+                >
+                  <FileText class="h-4 w-4" />
+                </button>
+                <button
+                  v-if="job.status === 'running' || job.status === 'pending'"
+                  class="rounded p-1 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors"
+                  title="Cancel job"
+                  @click="store.cancelJob(job.id)"
+                >
+                  <Ban class="h-4 w-4" />
+                </button>
+              </div>
             </td>
           </tr>
         </TransitionGroup>

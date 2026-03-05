@@ -53,6 +53,13 @@ class RunVerify implements ShouldQueue
             $repoPath = rtrim($plan->repository->config['path'] ?? '/data/repositories', '/').'/'.$plan->id;
 
             $job->update(['progress' => 20]);
+
+            if ($job->isCancelled()) {
+                $log->line('Job cancelled by user.');
+                $log->close();
+                return;
+            }
+
             $log->section('Running borg check');
             $passed = $engine->verify($repoPath, $this->archiveId);
 

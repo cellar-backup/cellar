@@ -58,4 +58,13 @@ class Job extends Model
     {
         return $this->plan?->name ?? '';
     }
+
+    /**
+     * Check if this job has been cancelled (e.g. by user from the UI).
+     * Queue jobs should call this periodically and abort if true.
+     */
+    public function isCancelled(): bool
+    {
+        return $this->fresh()?->status === \App\Enums\JobStatus::Cancelled;
+    }
 }

@@ -55,11 +55,24 @@ class RunPrune implements ShouldQueue
             $repoPath = rtrim($plan->repository->config['path'] ?? '/data/repositories', '/').'/'.$plan->id;
 
             $job->update(['progress' => 20]);
+
+            if ($job->isCancelled()) {
+                $log->line('Job cancelled by user.');
+                $log->close();
+                return;
+            }
+
             $log->section('Running borg prune');
             $result = $engine->prune($repoPath, $plan->retention_policy, $this->dryRun);
             $log->line($result->message);
 
             $job->update(['progress' => 60]);
+
+            if ($job->isCancelled()) {
+                $log->line('Job cancelled by user.');
+                $log->close();
+                return;
+            }
 
             // If not dry run, reconcile DB archives with what's actually in the repo
             if (! $this->dryRun) {

@@ -59,6 +59,13 @@ class RunRestore implements ShouldQueue
             // 1. Extract archive to temp directory
             mkdir($tmpDir, 0755, true);
             $job->update(['progress' => 15]);
+
+            if ($job->isCancelled()) {
+                $log->line('Job cancelled by user.');
+                $log->close();
+                return;
+            }
+
             $log->section('Extracting archive');
             $result = $engine->restore($repoPath, $archive->archive_id, $tmpDir);
 
@@ -70,6 +77,12 @@ class RunRestore implements ShouldQueue
             $log->line("Extraction completed in {$result->durationSeconds}s");
             $job->update(['progress' => 50]);
 
+            if ($job->isCancelled()) {
+                $log->line('Job cancelled by user.');
+                $log->close();
+                return;
+            }
+
             // 2. Find the dump file in the extracted content
             $dumpFile = self::findDumpFile($tmpDir);
             if (! $dumpFile) {
@@ -80,6 +93,13 @@ class RunRestore implements ShouldQueue
 
             // 3. Restore dump into the source database
             $job->update(['progress' => 60]);
+
+            if ($job->isCancelled()) {
+                $log->line('Job cancelled by user.');
+                $log->close();
+                return;
+            }
+
             if ($source->getIsDatabase()) {
                 $log->section('Database restore');
                 $log->line("Restoring to {$source->source_type->value}: {$source->database_name}");
