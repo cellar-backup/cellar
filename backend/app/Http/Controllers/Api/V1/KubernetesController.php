@@ -296,13 +296,14 @@ class KubernetesController extends Controller
                 'enabled' => true,
             ]);
 
-            // Create a backup plan for each source (schedule disabled by default)
+            // Create a backup plan for each source
             BackupPlan::create([
                 'name' => 'Backup: '.$sourceName,
                 'source_id' => $source->id,
                 'repository_id' => $repo->id,
+                'status' => 'idle',
                 'schedule_cron' => '0 2 * * *',
-                'schedule_enabled' => false,
+                'schedule_enabled' => true,
             ]);
 
             $created[] = $source;

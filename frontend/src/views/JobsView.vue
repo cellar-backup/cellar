@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
-import { usePlansStore } from "@/stores/plans";
+import { onMounted, onUnmounted, ref, nextTick } from "vue";
+import { usePlansStore, type Job } from "@/stores/plans";
 import {
   Clock,
   CircleCheck,
@@ -22,9 +22,12 @@ const logContent = ref<string | null>(null);
 const logLoading = ref(false);
 const logJobId = ref<string | null>(null);
 const logJobLabel = ref("");
+const logScrollArea = ref<HTMLElement | null>(null);
+let logPollTimer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(() => {
   store.fetchJobs();
+  store.startPolling();
   tickTimer = setInterval(() => {
     now.value = Date.now();
   }, 1000);
@@ -33,7 +36,55 @@ onMounted(() => {
 onUnmounted(() => {
   store.stopPolling();
   if (tickTimer) clearInterval(tickTimer);
+  stopLogPolling();
 });
+
+function scrollLogToBottom() {
+  nextTick(() => {
+    if (logScrollArea.value) {
+      logScrollArea.value.scrollTop = logScrollArea.value.scrollHeight;
+    }
+  });
+}
+
+function stopLogPolling() {
+  if (logPollTimer) {
+    clearInterval(logPollTimer);
+    logPollTimer = null;
+  }
+}
+
+function isJobRunning(): boolean {
+  if (!logJobId.value) return false;
+  const job = store.jobs.find((j: Job) => j.id === logJobId.value);
+  return job?.status === "running" || job?.status === "pending";
+}
+
+async function fetchLogContent() {
+  if (!logJobId.value) return;
+  try {
+    const result = await store.fetchJobLog(logJobId.value);
+    if (result.content !== null) {
+      const wasAtBottom =
+        logScrollArea.value &&
+        logScrollArea.value.scrollHeight -
+          logScrollArea.value.scrollTop -
+          logScrollArea.value.clientHeight <
+          50;
+      logContent.value = result.content;
+      // Auto-scroll only if user was near the bottom
+      if (wasAtBottom || logLoading.value) {
+        scrollLogToBottom();
+      }
+    } else if (!logContent.value) {
+      logContent.value = null;
+    }
+  } catch {
+    if (!logContent.value) {
+      logContent.value = "Failed to load log.";
+    }
+  }
+}
 
 async function openLog(jobId: string, label: string) {
   logJobId.value = jobId;
@@ -41,14 +92,21 @@ async function openLog(jobId: string, label: string) {
   logContent.value = null;
   logLoading.value = true;
   showLog.value = true;
+  stopLogPolling();
 
-  try {
-    const result = await store.fetchJobLog(jobId);
-    logContent.value = result.content;
-  } catch {
-    logContent.value = "Failed to load log.";
-  } finally {
-    logLoading.value = false;
+  await fetchLogContent();
+  logLoading.value = false;
+
+  // If the job is running, poll for live updates
+  if (isJobRunning()) {
+    logPollTimer = setInterval(async () => {
+      await fetchLogContent();
+      // Stop polling once the job finishes
+      if (!isJobRunning()) {
+        stopLogPolling();
+        await fetchLogContent(); // One final fetch
+      }
+    }, 2000);
   }
 }
 
@@ -56,6 +114,7 @@ function closeLog() {
   showLog.value = false;
   logContent.value = null;
   logJobId.value = null;
+  stopLogPolling();
 }
 
 function statusIcon(status: string) {
@@ -283,7 +342,7 @@ function duration(start: string | null, end: string | null) {
           </div>
 
           <!-- Content -->
-          <div class="flex-1 overflow-auto p-6">
+          <div ref="logScrollArea" class="flex-1 overflow-auto p-6">
             <div
               v-if="logLoading"
               class="flex items-center gap-2 text-text-muted"
@@ -297,8 +356,15 @@ function duration(start: string | null, end: string | null) {
               >{{ logContent }}</pre
             >
             <p v-else class="text-sm text-text-muted">
-              No log available for this job.
+              No log available for this job yet.
             </p>
+            <div
+              v-if="isJobRunning() && !logLoading"
+              class="mt-3 flex items-center gap-2 text-xs text-info"
+            >
+              <Loader2 class="h-3.5 w-3.5 animate-spin" />
+              Live — updating every 2 seconds
+            </div>
           </div>
         </div>
       </div>

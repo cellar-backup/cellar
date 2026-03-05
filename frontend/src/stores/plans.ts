@@ -115,12 +115,44 @@ export const usePlansStore = defineStore("plans", () => {
     }
   }
 
+  /**
+   * Merge incoming items into an existing reactive array by `id`,
+   * updating changed properties in-place so Vue only re-renders dirty rows.
+   */
+  function mergeById<T extends { id: string }>(
+    existing: T[],
+    incoming: T[],
+  ): T[] {
+    const map = new Map(existing.map((item) => [item.id, item]));
+    const result: T[] = [];
+
+    for (const item of incoming) {
+      const prev = map.get(item.id);
+      if (prev) {
+        // Patch changed fields in-place
+        for (const key of Object.keys(item) as (keyof T)[]) {
+          if (JSON.stringify(prev[key]) !== JSON.stringify(item[key])) {
+            (prev as Record<string, unknown>)[key as string] = item[key];
+          }
+        }
+        result.push(prev);
+      } else {
+        result.push(item);
+      }
+    }
+
+    return result;
+  }
+
   async function fetchPlans() {
     loading.value = true;
     error.value = null;
     try {
       const { data } = await api.get("/plans");
-      plans.value = Array.isArray(data) ? data : (data.data ?? data);
+      const incoming: BackupPlan[] = Array.isArray(data)
+        ? data
+        : (data.data ?? data);
+      plans.value = mergeById(plans.value, incoming);
       ensurePolling();
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : "Failed to fetch plans";
@@ -132,7 +164,8 @@ export const usePlansStore = defineStore("plans", () => {
   async function fetchJobs() {
     try {
       const { data } = await api.get("/jobs");
-      jobs.value = Array.isArray(data) ? data : (data.data ?? data);
+      const incoming: Job[] = Array.isArray(data) ? data : (data.data ?? data);
+      jobs.value = mergeById(jobs.value, incoming);
       ensurePolling();
     } catch {
       /* silent */
@@ -142,7 +175,10 @@ export const usePlansStore = defineStore("plans", () => {
   async function fetchArchives() {
     try {
       const { data } = await api.get("/archives");
-      archives.value = Array.isArray(data) ? data : (data.data ?? data);
+      const incoming: Archive[] = Array.isArray(data)
+        ? data
+        : (data.data ?? data);
+      archives.value = mergeById(archives.value, incoming);
     } catch {
       /* silent */
     }

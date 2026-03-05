@@ -39,7 +39,8 @@ class DatabaseDumper
     {
         $host = $c['host'] ?? 'localhost';
         $port = (string) ($c['port'] ?? 5432);
-        $user = $c['user'] ?? $c['username'] ?? 'postgres';
+        $user = $c['user'] ?? $c['username'] ?? '';
+        $user = $user ?: 'postgres'; // default to postgres
         $password = $c['password'] ?? '';
         $database = $c['database'] ?? $c['database_name'] ?? 'postgres';
         $extra = $c['extra_args'] ?? [];
@@ -70,7 +71,8 @@ class DatabaseDumper
     {
         $host = $c['host'] ?? 'localhost';
         $port = (string) ($c['port'] ?? 3306);
-        $user = $c['user'] ?? $c['username'] ?? 'root';
+        $user = $c['user'] ?? $c['username'] ?? '';
+        $user = $user ?: 'root'; // default to root for MySQL
         $password = $c['password'] ?? '';
         $database = $c['database'] ?? $c['database_name'] ?? '';
         $extra = $c['extra_args'] ?? [];
