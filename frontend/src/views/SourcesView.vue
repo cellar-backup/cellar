@@ -128,27 +128,52 @@ function fmtTime(dateStr: string | null) {
 function fmtRetention(policy: Record<string, number> | null) {
   if (!policy) return "Default";
   const parts: string[] = [];
-  if (policy.keep_daily) parts.push(policy.keep_daily + " daily");
-  if (policy.keep_weekly) parts.push(policy.keep_weekly + " weekly");
-  if (policy.keep_monthly) parts.push(policy.keep_monthly + " monthly");
-  if (policy.keep_yearly) parts.push(policy.keep_yearly + " yearly");
+  if (policy.keep_daily)
+    parts.push(
+      "1 per day \u00D7 " +
+        policy.keep_daily +
+        (policy.keep_daily === 1 ? " day" : " days"),
+    );
+  if (policy.keep_weekly)
+    parts.push(
+      "1 per week \u00D7 " +
+        policy.keep_weekly +
+        (policy.keep_weekly === 1 ? " week" : " weeks"),
+    );
+  if (policy.keep_monthly)
+    parts.push(
+      "1 per month \u00D7 " +
+        policy.keep_monthly +
+        (policy.keep_monthly === 1 ? " month" : " months"),
+    );
+  if (policy.keep_yearly)
+    parts.push(
+      "1 per year \u00D7 " +
+        policy.keep_yearly +
+        (policy.keep_yearly === 1 ? " year" : " years"),
+    );
   return parts.join(", ") || "Custom";
 }
 
 const RETENTION_PRESETS = [
   {
     label: "Minimal",
-    desc: "3 daily, 2 weekly",
+    desc: "~5 backups kept",
+    detail: "Best daily from last 3 days + best weekly from last 2 weeks",
     policy: { keep_daily: 3, keep_weekly: 2 },
   },
   {
     label: "Standard",
-    desc: "7 daily, 4 weekly, 6 monthly",
+    desc: "~17 backups kept",
+    detail:
+      "Best daily \u00D7 7 days + best weekly \u00D7 4 weeks + best monthly \u00D7 6 months",
     policy: { keep_daily: 7, keep_weekly: 4, keep_monthly: 6 },
   },
   {
     label: "Extended",
-    desc: "14 daily, 8 weekly, 12 monthly, 2 yearly",
+    desc: "~36 backups kept",
+    detail:
+      "Best daily \u00D7 14 days + best weekly \u00D7 8 weeks + best monthly \u00D7 12 months + best yearly \u00D7 2 years",
     policy: {
       keep_daily: 14,
       keep_weekly: 8,
@@ -158,7 +183,9 @@ const RETENTION_PRESETS = [
   },
   {
     label: "Archival",
-    desc: "30 daily, 12 weekly, 24 monthly, 5 yearly",
+    desc: "~71 backups kept",
+    detail:
+      "Best daily \u00D7 30 + best weekly \u00D7 12 + best monthly \u00D7 24 + best yearly \u00D7 5",
     policy: {
       keep_daily: 30,
       keep_weekly: 12,
@@ -1301,7 +1328,13 @@ async function cancelJob(jobId: string, jobType: string) {
                   </h3>
                   <p class="text-xs text-text-muted mt-0.5">
                     <span class="font-mono">{{ pol.schedule_cron }}</span>
-                    &middot; {{ pol.engine }} &middot; Retention:
+                    &middot; {{ pol.engine }}
+                  </p>
+                  <p
+                    class="text-[11px] text-text-muted mt-0.5"
+                    :title="fmtRetention(pol.retention_policy)"
+                  >
+                    Pruning keeps:
                     {{ fmtRetention(pol.retention_policy) }}
                   </p>
                 </div>
@@ -1391,59 +1424,95 @@ async function cancelJob(jobId: string, jobType: string) {
                 </div>
                 <div>
                   <label
-                    class="mb-1.5 block text-xs font-medium text-text-muted"
+                    class="mb-1 block text-xs font-medium text-text-muted"
                     >Retention Policy</label
                   >
-                  <div class="flex flex-wrap gap-1.5 mb-2">
+                  <p class="mb-2 text-[11px] text-text-muted leading-relaxed">
+                    When pruning runs, Cellar keeps the <strong>best backup</strong>
+                    from each time window below and deletes the rest.
+                    For example, &ldquo;7 days&rdquo; means keep 1 backup per day
+                    for the last 7 days (7 snapshots from that tier).
+                  </p>
+                  <div class="flex flex-wrap gap-1.5 mb-3">
                     <button
                       v-for="preset in RETENTION_PRESETS"
                       :key="preset.label"
-                      class="rounded-lg border border-border px-2.5 py-1 text-xs text-text-muted hover:bg-surface-raised hover:text-text-primary transition-colors"
-                      :title="preset.desc"
+                      class="rounded-lg border border-border px-2.5 py-1.5 text-left hover:bg-surface-raised hover:border-primary/30 transition-colors group/preset"
+                      :title="preset.detail"
                       @click="applyRetentionPreset(preset)"
                     >
-                      {{ preset.label }}
+                      <span class="block text-xs font-medium text-text-primary group-hover/preset:text-primary">
+                        {{ preset.label }}
+                      </span>
+                      <span class="block text-[10px] text-text-muted">
+                        {{ preset.desc }}
+                      </span>
                     </button>
                   </div>
-                  <div class="grid grid-cols-4 gap-2">
-                    <div>
-                      <label class="text-[10px] text-text-muted">Daily</label>
+                  <div class="space-y-2">
+                    <div class="flex items-center gap-2">
+                      <span class="text-[11px] text-text-muted w-[140px] shrink-0"
+                        >Keep 1 per day for</span
+                      >
                       <input
                         v-model.number="policyForm.retention_policy.keep_daily"
                         type="number"
                         min="0"
-                        class="w-full rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary focus:border-primary focus:outline-none"
+                        class="w-16 rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary text-center focus:border-primary focus:outline-none"
                       />
+                      <span class="text-[11px] text-text-muted">days</span>
                     </div>
-                    <div>
-                      <label class="text-[10px] text-text-muted">Weekly</label>
+                    <div class="flex items-center gap-2">
+                      <span class="text-[11px] text-text-muted w-[140px] shrink-0"
+                        >Keep 1 per week for</span
+                      >
                       <input
                         v-model.number="policyForm.retention_policy.keep_weekly"
                         type="number"
                         min="0"
-                        class="w-full rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary focus:border-primary focus:outline-none"
+                        class="w-16 rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary text-center focus:border-primary focus:outline-none"
                       />
+                      <span class="text-[11px] text-text-muted">weeks</span>
                     </div>
-                    <div>
-                      <label class="text-[10px] text-text-muted">Monthly</label>
+                    <div class="flex items-center gap-2">
+                      <span class="text-[11px] text-text-muted w-[140px] shrink-0"
+                        >Keep 1 per month for</span
+                      >
                       <input
                         v-model.number="
                           policyForm.retention_policy.keep_monthly
                         "
                         type="number"
                         min="0"
-                        class="w-full rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary focus:border-primary focus:outline-none"
+                        class="w-16 rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary text-center focus:border-primary focus:outline-none"
                       />
+                      <span class="text-[11px] text-text-muted">months</span>
                     </div>
-                    <div>
-                      <label class="text-[10px] text-text-muted">Yearly</label>
+                    <div class="flex items-center gap-2">
+                      <span class="text-[11px] text-text-muted w-[140px] shrink-0"
+                        >Keep 1 per year for</span
+                      >
                       <input
                         v-model.number="policyForm.retention_policy.keep_yearly"
                         type="number"
                         min="0"
-                        class="w-full rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary focus:border-primary focus:outline-none"
+                        class="w-16 rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary text-center focus:border-primary focus:outline-none"
                       />
+                      <span class="text-[11px] text-text-muted">years</span>
                     </div>
+                  </div>
+                  <div
+                    v-if="
+                      policyForm.retention_policy.keep_daily ||
+                      policyForm.retention_policy.keep_weekly ||
+                      policyForm.retention_policy.keep_monthly ||
+                      policyForm.retention_policy.keep_yearly
+                    "
+                    class="mt-2 rounded-lg bg-info/5 border border-info/10 px-3 py-2 text-[11px] text-info leading-relaxed"
+                  >
+                    <strong>Summary:</strong>
+                    {{ fmtRetention(policyForm.retention_policy) }}.
+                    Older backups outside these windows are automatically deleted when pruning runs.
                   </div>
                 </div>
                 <div class="flex items-center gap-2">
