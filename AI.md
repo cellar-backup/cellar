@@ -498,8 +498,9 @@ All jobs are queued (Redis via Horizon). They create a `Job` record, update plan
 
 ### `RunBackup`
 
-- **Timeout:** 7200s, **Tries:** 2
-- Flow: Load plan → create job record → init borg repo if needed → dump database (if DB source) to temp dir → run `borg create` → create `Archive` record → update job status
+- **Timeout:** 28800s (8h), **Tries:** 2
+- Flow: Load plan → create job record → init borg repo if needed → estimate DB size → dump database (if DB source) to temp dir with real-time progress polling → run `borg create` → create `Archive` record → update job status
+- **Progress tracking:** For database sources, queries `pg_database_size()` / `information_schema` to estimate DB size, then runs the dump non-blocking (`Process::start()`) and polls output file/directory size every 3 seconds. Maps dump progress (0–100%) to job progress 12–55%. Borg phase is 60–90% (staged). Filesystem sources keep staged jumps.
 - Cleans up temp dump directory in `finally` block
 
 ### `RunPrune`
@@ -525,7 +526,9 @@ All jobs are queued (Redis via Horizon). They create a `Job` record, update plan
 
 ### `DatabaseDumper`
 
-Dispatches to `pg_dump` (PostgreSQL, custom format `-Fc`) or `mysqldump` (MySQL/MariaDB). Returns `DumpResult` DTO with success, path, size, message.
+Dispatches to `pg_dump` (PostgreSQL, directory format `-Fd` for direct, custom format `-Fc` for kubectl) or `mysqldump` (MySQL/MariaDB). Returns `DumpResult` DTO with success, path, size, message.
+
+**Progress tracking:** Accepts optional `Closure $onProgress` callback. When provided, estimates DB size (`pg_database_size()` for PostgreSQL, `information_schema` for MySQL), runs the dump non-blocking via `Process::start()`, and polls output file/directory size every 3 seconds. Reports progress as `bytes_written / estimated_size` (capped at 95%). Estimation factors: direct pg_dump uses `raw_size × 0.7`; kubectl pg_dump uses `raw_size / 5` (compressed format). Falls back to blocking `Process::run()` when no callback or estimation fails.
 
 ### `DatabaseRestorer`
 

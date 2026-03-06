@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Closure;
 use Illuminate\Support\Facades\Process;
 
 class DumpResult
@@ -23,14 +24,15 @@ class DatabaseDumper
         string $dbType,
         array $config,
         string $outputDir,
+        ?Closure $onProgress = null,
     ): DumpResult {
         if (! is_dir($outputDir)) {
             mkdir($outputDir, 0755, true);
         }
 
         return match ($dbType) {
-            'postgresql' => self::dumpPostgresql($config, $outputDir),
-            'mysql', 'mariadb' => self::dumpMysql($config, $outputDir),
+            'postgresql' => self::dumpPostgresql($config, $outputDir, $onProgress),
+            'mysql', 'mariadb' => self::dumpMysql($config, $outputDir, $onProgress),
             default => new DumpResult(false, message: "Unsupported database type: {$dbType}"),
         };
     }
@@ -51,14 +53,15 @@ class DatabaseDumper
         array $config,
         string $outputDir,
         array $kubectlConfig,
+        ?Closure $onProgress = null,
     ): DumpResult {
         if (! is_dir($outputDir)) {
             mkdir($outputDir, 0755, true);
         }
 
         return match ($dbType) {
-            'postgresql' => self::dumpPostgresqlKubectl($config, $outputDir, $kubectlConfig),
-            'mysql', 'mariadb' => self::dumpMysqlKubectl($config, $outputDir, $kubectlConfig),
+            'postgresql' => self::dumpPostgresqlKubectl($config, $outputDir, $kubectlConfig, $onProgress),
+            'mysql', 'mariadb' => self::dumpMysqlKubectl($config, $outputDir, $kubectlConfig, $onProgress),
             default => new DumpResult(false, message: "Unsupported database type for kubectl exec: {$dbType}"),
         };
     }
@@ -120,7 +123,188 @@ class DatabaseDumper
         return $result->successful() && str_contains(trim($result->output()), '1');
     }
 
-    private static function dumpPostgresql(array $c, string $outputDir): DumpResult
+    // ── Progress tracking helpers ───────────────────────────────
+
+    /**
+     * Query a PostgreSQL database to estimate its on-disk size (bytes).
+     */
+    private static function queryPostgresqlSize(array $c): int
+    {
+        $host = $c['host'] ?? 'localhost';
+        $port = (string) ($c['port'] ?? 5432);
+        $user = $c['user'] ?? $c['username'] ?? '';
+        $user = $user ?: 'postgres';
+        $password = $c['password'] ?? '';
+        $database = $c['database'] ?? $c['database_name'] ?? 'postgres';
+
+        try {
+            $result = Process::timeout(15)
+                ->env(['PGPASSWORD' => $password])
+                ->run([
+                    'psql', '-h', $host, '-p', $port, '-U', $user, '--no-password',
+                    '-tAc', 'SELECT pg_database_size(current_database())',
+                    $database,
+                ]);
+
+            if ($result->successful()) {
+                return max(0, (int) trim($result->output()));
+            }
+        } catch (\Throwable) {
+            // Size estimation is best-effort
+        }
+
+        return 0;
+    }
+
+    /**
+     * Query a MySQL/MariaDB database to estimate its on-disk size (bytes).
+     */
+    private static function queryMysqlSize(array $c): int
+    {
+        $host = $c['host'] ?? 'localhost';
+        $port = (string) ($c['port'] ?? 3306);
+        $user = $c['user'] ?? $c['username'] ?? '';
+        $user = $user ?: 'root';
+        $password = $c['password'] ?? '';
+        $database = $c['database'] ?? $c['database_name'] ?? '';
+
+        try {
+            $cmd = ['mysql', '-h', $host, '-P', $port, '-u', $user, '--skip-ssl', '-N', '-B', '-e',
+                "SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '{$database}'"];
+
+            if ($password) {
+                $cmd[] = "--password={$password}";
+            }
+
+            $result = Process::timeout(15)->run($cmd);
+
+            if ($result->successful()) {
+                return max(0, (int) trim($result->output()));
+            }
+        } catch (\Throwable) {
+            // Size estimation is best-effort
+        }
+
+        return 0;
+    }
+
+    /**
+     * Estimate PostgreSQL DB size via kubectl exec (for in-pod dumps).
+     */
+    private static function queryPostgresqlSizeKubectl(array $c, array $kc): int
+    {
+        $user = $c['user'] ?? $c['username'] ?? 'postgres';
+        $password = $c['password'] ?? '';
+        $database = $c['database'] ?? $c['database_name'] ?? 'postgres';
+
+        try {
+            $cmd = 'PGPASSWORD='.escapeshellarg($password)
+                .' psql -U '.escapeshellarg($user)
+                .' -tAc "SELECT pg_database_size(current_database())"'
+                .' '.escapeshellarg($database);
+
+            $fullCmd = array_merge(self::kubectlExecPrefix($kc), ['sh', '-c', $cmd]);
+            $result = Process::timeout(15)->run($fullCmd);
+
+            if ($result->successful()) {
+                return max(0, (int) trim($result->output()));
+            }
+        } catch (\Throwable) {
+            // Size estimation is best-effort
+        }
+
+        return 0;
+    }
+
+    /**
+     * Estimate MySQL/MariaDB DB size via kubectl exec (for in-pod dumps).
+     */
+    private static function queryMysqlSizeKubectl(array $c, array $kc): int
+    {
+        $user = $c['user'] ?? $c['username'] ?? 'root';
+        $password = $c['password'] ?? '';
+        $database = $c['database'] ?? $c['database_name'] ?? '';
+
+        try {
+            $pwdPart = $password ? ' --password='.escapeshellarg($password) : '';
+            $cmd = 'mysql -u '.escapeshellarg($user).$pwdPart
+                .' -N -B -e '.escapeshellarg("SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '{$database}'");
+
+            $fullCmd = array_merge(self::kubectlExecPrefix($kc), ['sh', '-c', $cmd]);
+            $result = Process::timeout(15)->run($fullCmd);
+
+            if ($result->successful()) {
+                return max(0, (int) trim($result->output()));
+            }
+        } catch (\Throwable) {
+            // Size estimation is best-effort
+        }
+
+        return 0;
+    }
+
+    /**
+     * Calculate total size of all files in a directory (recursive).
+     */
+    private static function directorySize(string $path): int
+    {
+        $total = 0;
+        if (is_dir($path)) {
+            $iter = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS),
+            );
+            foreach ($iter as $file) {
+                if ($file->isFile()) {
+                    $total += $file->getSize();
+                }
+            }
+        }
+
+        return $total;
+    }
+
+    /**
+     * Run a process with optional file-size-based progress polling.
+     *
+     * When $onProgress is provided and $estimatedSize > 0, the process
+     * runs non-blocking and polls the output path size every 3 seconds,
+     * reporting progress as bytes_written / estimated_size (0-100).
+     */
+    private static function runWithProgress(
+        array $cmd,
+        array $env,
+        string $outputPath,
+        int $estimatedSize,
+        ?Closure $onProgress,
+        bool $isDirectory = false,
+        int $timeout = 21600,
+    ): \Illuminate\Process\ProcessResult {
+        $builder = Process::timeout($timeout)->env($env);
+
+        if (! $onProgress || $estimatedSize <= 0) {
+            return $builder->run($cmd);
+        }
+
+        $process = $builder->start($cmd);
+
+        while ($process->running()) {
+            clearstatcache(true);
+            $currentSize = $isDirectory
+                ? self::directorySize($outputPath)
+                : (file_exists($outputPath) ? (int) filesize($outputPath) : 0);
+
+            $pct = min(95.0, ($currentSize / $estimatedSize) * 100);
+            $onProgress($pct);
+
+            sleep(3);
+        }
+
+        return $process->wait();
+    }
+
+    // ── Dump implementations ───────────────────────────────────
+
+    private static function dumpPostgresql(array $c, string $outputDir, ?Closure $onProgress = null): DumpResult
     {
         $host = $c['host'] ?? 'localhost';
         $port = (string) ($c['port'] ?? 5432);
@@ -172,9 +356,17 @@ class DatabaseDumper
         $cmd[] = $outPath;
         $cmd = array_merge($cmd, (array) $extra, [$database]);
 
-        $result = Process::timeout(21600)
-            ->env(['PGPASSWORD' => $password])
-            ->run($cmd);
+        // Estimate DB size for progress tracking (uncompressed dir format ≈ 70% of pg_database_size)
+        $estimatedSize = $onProgress ? max(1, (int) (self::queryPostgresqlSize($c) * 0.7)) : 0;
+
+        $result = self::runWithProgress(
+            cmd: $cmd,
+            env: ['PGPASSWORD' => $password],
+            outputPath: $outPath,
+            estimatedSize: $estimatedSize,
+            onProgress: $onProgress,
+            isDirectory: true,
+        );
 
         if (! $result->successful()) {
             return new DumpResult(false, message: 'pg_dump failed: '.$result->errorOutput());
@@ -200,7 +392,7 @@ class DatabaseDumper
         );
     }
 
-    private static function dumpMysql(array $c, string $outputDir): DumpResult
+    private static function dumpMysql(array $c, string $outputDir, ?Closure $onProgress = null): DumpResult
     {
         $host = $c['host'] ?? 'localhost';
         $port = (string) ($c['port'] ?? 3306);
@@ -234,7 +426,16 @@ class DatabaseDumper
         $cmdParts = array_map('escapeshellarg', $cmd);
         $fullCmd = implode(' ', $cmdParts).' > '.escapeshellarg($outFile);
 
-        $result = Process::timeout(21600)->run(['sh', '-c', $fullCmd]);
+        // Estimate DB size for progress tracking
+        $estimatedSize = $onProgress ? self::queryMysqlSize($c) : 0;
+
+        $result = self::runWithProgress(
+            cmd: ['sh', '-c', $fullCmd],
+            env: [],
+            outputPath: $outFile,
+            estimatedSize: $estimatedSize,
+            onProgress: $onProgress,
+        );
 
         if (! $result->successful()) {
             return new DumpResult(false, message: 'mysqldump failed: '.$result->errorOutput());
@@ -273,7 +474,7 @@ class DatabaseDumper
         return array_merge($cmd, ['exec', $kc['pod'], '-n', $kc['namespace'], '--']);
     }
 
-    private static function dumpMysqlKubectl(array $c, string $outputDir, array $kc): DumpResult
+    private static function dumpMysqlKubectl(array $c, string $outputDir, array $kc, ?Closure $onProgress = null): DumpResult
     {
         $user = $c['user'] ?? $c['username'] ?? '';
         $user = $user ?: 'root';
@@ -306,7 +507,16 @@ class DatabaseDumper
             .' '.implode(' ', $dumpParts)
             .' > '.escapeshellarg($outFile);
 
-        $result = Process::timeout(21600)->run(['sh', '-c', $fullCmd]);
+        // Estimate DB size for progress tracking
+        $estimatedSize = $onProgress ? self::queryMysqlSizeKubectl($c, $kc) : 0;
+
+        $result = self::runWithProgress(
+            cmd: ['sh', '-c', $fullCmd],
+            env: [],
+            outputPath: $outFile,
+            estimatedSize: $estimatedSize,
+            onProgress: $onProgress,
+        );
 
         if (! $result->successful()) {
             return new DumpResult(false, message: 'mysqldump via kubectl exec failed: '.$result->errorOutput());
@@ -324,7 +534,7 @@ class DatabaseDumper
         );
     }
 
-    private static function dumpPostgresqlKubectl(array $c, string $outputDir, array $kc): DumpResult
+    private static function dumpPostgresqlKubectl(array $c, string $outputDir, array $kc, ?Closure $onProgress = null): DumpResult
     {
         $user = $c['user'] ?? $c['username'] ?? '';
         $user = $user ?: 'postgres';
@@ -361,7 +571,16 @@ class DatabaseDumper
             .' sh -c '.escapeshellarg($shellCmd)
             .' > '.escapeshellarg($outFile);
 
-        $result = Process::timeout(21600)->run(['sh', '-c', $fullCmd]);
+        // Estimate DB size for progress (compressed format ≈ 1/5 of pg_database_size)
+        $estimatedSize = $onProgress ? max(1, (int) (self::queryPostgresqlSizeKubectl($c, $kc) / 5)) : 0;
+
+        $result = self::runWithProgress(
+            cmd: ['sh', '-c', $fullCmd],
+            env: [],
+            outputPath: $outFile,
+            estimatedSize: $estimatedSize,
+            onProgress: $onProgress,
+        );
 
         if (! $result->successful()) {
             return new DumpResult(false, message: 'pg_dump via kubectl exec failed: '.$result->errorOutput());

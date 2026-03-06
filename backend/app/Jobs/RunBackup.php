@@ -79,7 +79,7 @@ class RunBackup implements ShouldQueue
                 $tmpDir = sys_get_temp_dir().'/cellar_dump_'.Str::random(8);
                 mkdir($tmpDir, 0755, true);
 
-                $job->update(['progress' => 15]);
+                $job->update(['progress' => 12]);
                 $log->section('Database dump');
                 $log->line("Dumping {$source->source_type->value} database: {$source->database_name}");
                 $log->line("Host: {$source->host}:{$source->port}");
@@ -92,6 +92,16 @@ class RunBackup implements ShouldQueue
                     'database_name' => $source->database_name,
                 ];
 
+                // Progress callback: maps dump 0-100% to job 12-55%
+                $lastDumpProgress = 12;
+                $dumpProgress = function (float $pct) use ($job, &$lastDumpProgress) {
+                    $mapped = 12 + (int) round($pct * 0.43);
+                    if ($mapped > $lastDumpProgress) {
+                        $lastDumpProgress = $mapped;
+                        $job->update(['progress' => min($mapped, 55)]);
+                    }
+                };
+
                 $dumpResult = null;
                 $k8s = $source->extra_config['kubernetes'] ?? null;
                 $dumpMethod = $k8s['dump_method'] ?? null;
@@ -103,13 +113,14 @@ class RunBackup implements ShouldQueue
                 if ($dumpMethod === 'kubectl'
                     && $k8s && ! empty($k8s['cluster_id']) && ! empty($k8s['namespace']) && ! empty($k8s['app_name'])) {
                     $log->line('Using kubectl exec dump (configured for in-cluster access)...');
-                    $dumpResult = $this->tryKubectlDump($source, $dbConfig, $tmpDir, $k8s, $log);
+                    $dumpResult = $this->tryKubectlDump($source, $dbConfig, $tmpDir, $k8s, $log, $dumpProgress);
                 } elseif ($dumpMethod === 'direct') {
                     $log->line('Using direct network dump (configured for external access)...');
                     $dumpResult = DatabaseDumper::dump(
                         $source->source_type->value,
                         $dbConfig,
                         $tmpDir,
+                        $dumpProgress,
                     );
                 } else {
                     // Legacy / no dump_method set — try direct first, fall back to kubectl
@@ -118,12 +129,13 @@ class RunBackup implements ShouldQueue
                         $source->source_type->value,
                         $dbConfig,
                         $tmpDir,
+                        $dumpProgress,
                     );
 
                     if ((! $dumpResult || ! $dumpResult->success)
                         && $k8s && ! empty($k8s['cluster_id']) && ! empty($k8s['namespace']) && ! empty($k8s['app_name'])) {
                         $log->line('Direct dump failed, trying kubectl exec (in-pod dump)...');
-                        $dumpResult = $this->tryKubectlDump($source, $dbConfig, $tmpDir, $k8s, $log);
+                        $dumpResult = $this->tryKubectlDump($source, $dbConfig, $tmpDir, $k8s, $log, $dumpProgress);
                     }
                 }
 
@@ -140,7 +152,7 @@ class RunBackup implements ShouldQueue
                     $log->line("Method: direct network connection");
                 }
                 $sourcePaths = [$tmpDir];
-                $job->update(['progress' => 30]);
+                $job->update(['progress' => 55]);
             } else {
                 $log->section('Filesystem source');
                 $log->line("Path: {$source->path}");
@@ -160,6 +172,7 @@ class RunBackup implements ShouldQueue
             $archiveName = $safeName.'-'.now()->format('Ymd\THis');
 
             // Run backup
+            $job->update(['progress' => 60]);
             $log->section('Borg backup');
             $log->line("Archive: {$archiveName}");
             $log->line("Compression: ".($plan->compression ?? 'lz4'));
@@ -171,7 +184,7 @@ class RunBackup implements ShouldQueue
                 compression: $plan->compression ?? 'lz4',
             );
 
-            $job->update(['progress' => 85]);
+            $job->update(['progress' => 90]);
             $log->line("Backup completed successfully");
             $log->line("Original size: {$result->sizeOriginal}");
             $log->line("Deduplicated size: {$result->sizeDedup}");
@@ -257,6 +270,7 @@ class RunBackup implements ShouldQueue
         string $tmpDir,
         array $k8s,
         JobLogger $log,
+        ?\Closure $onProgress = null,
     ): ?\App\Services\DumpResult {
         try {
             $cluster = RadarCluster::find($k8s['cluster_id']);
@@ -295,6 +309,7 @@ class RunBackup implements ShouldQueue
                     $dbConfig,
                     $tmpDir,
                     $kubectlConfig,
+                    $onProgress,
                 );
             } finally {
                 // Cleanup temp kubeconfig
