@@ -2,7 +2,7 @@
 # Cellar — Unified Single-Container Image
 #
 # All-in-one: Nginx + PHP API + Horizon Worker + Scheduler + Reverb WebSocket
-# Optional embedded Redis (enabled by default, disable via CELLAR_REDIS=false)
+# Requires an external Redis instance (set REDIS_HOST).
 #
 # Single port: 8420
 # Single volume: /app/data (SQLite + app key)
@@ -37,8 +37,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Web server & process manager
     nginx \
     supervisor \
-    # Redis (optional — can be disabled at runtime)
-    redis-server \
     # Build deps
     curl \
     unzip \
@@ -92,9 +90,8 @@ ENV APP_ENV=production \
     APP_URL=http://localhost:8420 \
     DB_CONNECTION=sqlite \
     DB_DATABASE=/app/data/cellar.sqlite \
-    # Redis — set CELLAR_REDIS=false + REDIS_HOST to use external Redis
-    CELLAR_REDIS=true \
-    REDIS_HOST=127.0.0.1 \
+    # Redis (external — set REDIS_HOST to your Redis instance)
+    REDIS_HOST=redis \
     REDIS_PORT=6379 \
     QUEUE_CONNECTION=redis \
     CACHE_STORE=redis \

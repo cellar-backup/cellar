@@ -30,34 +30,108 @@ Existing backup tools force you to choose between **power** (borgmatic, restic C
 - **Database + filesystem** — native support for PostgreSQL, MySQL, MongoDB, SQLite, Redis, plus any directory or Docker volume
 - **Custom Backup Documents** — extend Cellar for any workload with simple YAML manifests
 - **Beautiful dark-mode UI** — a modern Vue 3 interface that makes you want to check your backups
-- **Container-native** — single `docker compose up -d` to deploy everything
+- **Single container** — one image, one port, one volume — deploy in seconds
 
 ## Quick Start
 
+Cellar requires a Redis instance for queues and caching. The easiest way to get started:
+
 ```bash
-# Clone the repo
-git clone https://github.com/cellar-backup/cellar.git
-cd cellar
+# Start Redis
+docker run -d --name cellar-redis redis:7-alpine
 
-# Launch (that's it — zero config required)
-docker compose up -d
-
-# Open http://localhost:8420
-# Default credentials: admin / changeme
+# Start Cellar
+docker run -d \
+  --name cellar \
+  --link cellar-redis:redis \
+  -p 8420:8420 \
+  -v cellar-data:/app/data \
+  -v cellar-repos:/data/repositories \
+  ghcr.io/cellar-backup/cellar:latest
 ```
+
+Open **http://localhost:8420** — a setup wizard will guide you through creating your admin account and configuring your instance.
+
+> **Tip:** Point `REDIS_HOST` to an existing Redis instance instead of running a separate one:
+>
+> ```bash
+> docker run -d \
+>   --name cellar \
+>   -p 8420:8420 \
+>   -e REDIS_HOST=your-redis-host \
+>   -e APP_URL=https://cellar.example.com \
+>   -v cellar-data:/app/data \
+>   -v cellar-repos:/data/repositories \
+>   ghcr.io/cellar-backup/cellar:latest
+> ```
 
 ## Architecture
 
-| Container            | Role             | Stack                          |
-| -------------------- | ---------------- | ------------------------------ |
-| **cellar-api**       | REST API         | PHP 8.4 + Laravel 11 + Sanctum |
-| **cellar-worker**    | Async job runner | Laravel Horizon + Redis        |
-| **cellar-scheduler** | Cron scheduler   | Laravel Scheduler              |
-| **cellar-ui**        | Frontend SPA     | Vue 3 + Vite + Tailwind CSS    |
-| **cellar-redis**     | Queue & cache    | Redis 7                        |
-| **cellar-proxy**     | Reverse proxy    | Caddy 2                        |
+Cellar ships as a **single unified container** that runs all services via supervisord:
 
-> **Database:** SQLite by default — zero config, single file, trivially backed up.
+| Process         | Role              | Stack                          |
+| --------------- | ----------------- | ------------------------------ |
+| **nginx**       | Reverse proxy     | Nginx (port 8420)              |
+| **api**         | REST API          | PHP 8.4 + Laravel 11 + Sanctum |
+| **horizon**     | Async job runner  | Laravel Horizon                |
+| **scheduler**   | Cron scheduler    | Laravel Scheduler              |
+| **reverb**      | WebSocket server  | Laravel Reverb                 |
+
+**External dependencies:**
+
+- **Redis** (required) — queue, cache, and WebSocket pub/sub
+- **Database:** SQLite by default (zero config). PostgreSQL available via overlay — see [Advanced Deployment](#advanced-deployment).
+
+## Volumes
+
+| Path                | Purpose                          |
+| ------------------- | -------------------------------- |
+| `/app/data`         | SQLite database, app key         |
+| `/data/repositories`| Backup repositories (borg/restic)|
+
+## Environment Variables
+
+All variables have sensible defaults. Override only what you need:
+
+| Variable                    | Default                    | Description                          |
+| --------------------------- | -------------------------- | ------------------------------------ |
+| `APP_URL`                   | `http://localhost:8420`    | Public URL for this instance         |
+| `REDIS_HOST`                | `redis`                   | Redis hostname                       |
+| `REDIS_PORT`                | `6379`                    | Redis port                           |
+| `REDIS_PASSWORD`            | *(none)*                  | Redis password (if auth enabled)     |
+| `CELLAR_MAX_PARALLEL_JOBS`  | `2`                       | Max concurrent backup/restore jobs   |
+| `SANCTUM_STATEFUL_DOMAINS`  | `localhost:8420,localhost` | Cookie auth domains (CORS)           |
+
+See [`.env.example`](.env.example) for the full list.
+
+## Advanced Deployment
+
+### Docker Compose
+
+For more control or PostgreSQL support, use Docker Compose:
+
+```bash
+git clone https://github.com/cellar-backup/cellar.git
+cd cellar
+cp .env.example .env    # edit as needed
+docker compose up -d
+```
+
+For PostgreSQL instead of SQLite:
+
+```bash
+docker compose -f docker-compose.yml -f docker/docker-compose.postgres.yml up -d
+```
+
+Set `CELLAR_DB_NAME`, `CELLAR_DB_USER`, and `CELLAR_DB_PASSWORD` in your `.env`.
+
+### Kubernetes
+
+A sample manifest is provided in [`docker/kubernetes/cellar.yaml`](docker/kubernetes/cellar.yaml). It deploys Cellar + Redis in a single namespace:
+
+```bash
+kubectl apply -f docker/kubernetes/cellar.yaml
+```
 
 ## Project Structure
 
@@ -75,7 +149,7 @@ cellar/
 │   ├── database/         # Migrations
 │   └── routes/           # API routes, scheduler definitions
 ├── frontend/         # Vue 3 SPA — UI components, stores, views
-└── docker/           # Dockerfiles, Caddy config, entrypoint
+└── docker/           # Dockerfiles, Nginx config, supervisord, entrypoint
 ```
 
 ## Development
