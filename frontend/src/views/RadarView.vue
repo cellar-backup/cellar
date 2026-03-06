@@ -63,6 +63,7 @@ const importReviewItems = ref<
     detectedDatabases: string[] | null;
     dbDetectLoading: boolean;
     dbDetectError: string | null;
+    dump_method: 'direct' | 'kubectl';
   }>
 >([]);
 
@@ -240,6 +241,7 @@ async function importSelected() {
       detectedDatabases: null,
       dbDetectLoading: false,
       dbDetectError: null,
+      dump_method: inferDumpMethod(activeEndpoint(r)),
     };
   });
   showImportReview.value = true;
@@ -299,6 +301,13 @@ function cancelImportReview() {
   importReviewItems.value = [];
 }
 
+/** Determine dump method from an endpoint: external access → direct, otherwise kubectl */
+function inferDumpMethod(ep: ResourceEndpoint): 'direct' | 'kubectl' {
+  if (ep.external_host) return 'direct';
+  if (ep.kind === 'Service' && ep.service_type && ['LoadBalancer', 'NodePort', 'ExternalName'].includes(ep.service_type)) return 'direct';
+  return 'kubectl';
+}
+
 function switchReviewEndpoint(
   item: (typeof importReviewItems.value)[0],
   idx: number,
@@ -310,6 +319,7 @@ function switchReviewEndpoint(
     item.port = ep.external_host
       ? (ep.external_port ?? ep.port)
       : (ep.port ?? null);
+    item.dump_method = inferDumpMethod(ep);
   }
 }
 
@@ -333,6 +343,7 @@ async function confirmImport() {
         username: item.username || undefined,
         password: item.password || undefined,
         database_name: dbName || undefined,
+        dump_method: item.dump_method,
       });
     }
   }
@@ -803,6 +814,19 @@ onMounted(() => {
                   </span>
                 </button>
               </div>
+            </div>
+
+            <!-- Connection method indicator -->
+            <div class="mb-3 flex items-center gap-2">
+              <span
+                class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
+                :class="item.dump_method === 'kubectl'
+                  ? 'bg-info/10 text-info'
+                  : 'bg-success/10 text-success'"
+              >
+                <Server class="h-3 w-3" />
+                {{ item.dump_method === 'kubectl' ? 'kubectl exec (in-pod dump)' : 'Direct connection (external)' }}
+              </span>
             </div>
 
             <!-- Host + Port -->

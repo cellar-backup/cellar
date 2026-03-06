@@ -50,6 +50,7 @@ Route::prefix('v1')->group(function () {
         Route::post('sources/{source}/test-connection', [SourceController::class, 'testConnection']);
         Route::patch('sources/{source}/toggle', [SourceController::class, 'toggle']);
         Route::patch('sources/{source}/retention', [SourceController::class, 'updateRetention']);
+        Route::patch('sources/{source}/dump-method', [SourceController::class, 'updateDumpMethod']);
         Route::get('sources/{source}/policies', [SourceController::class, 'policies']);
         Route::get('sources/{source}/archives', [SourceController::class, 'archives']);
 

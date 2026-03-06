@@ -263,6 +263,7 @@ class KubernetesController extends Controller
             'resources.*.username' => 'nullable|string|max:255',
             'resources.*.password' => 'nullable|string|max:1000',
             'resources.*.database_name' => 'nullable|string|max:255',
+            'resources.*.dump_method' => 'nullable|string|in:direct,kubectl',
         ]);
 
         // Ensure a default repository exists for backup plans
@@ -299,6 +300,7 @@ class KubernetesController extends Controller
                         'cluster_id' => $cluster->id,
                         'namespace' => $r['namespace'],
                         'app_name' => $r['name'],
+                        'dump_method' => $r['dump_method'] ?? 'kubectl',
                     ],
                 ],
             ]);

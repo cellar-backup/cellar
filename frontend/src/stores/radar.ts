@@ -58,6 +58,7 @@ export interface ImportOverride {
   username?: string;
   password?: string;
   database_name?: string;
+  dump_method?: 'direct' | 'kubectl';
 }
 
 export interface RadarIgnoreEntry {
@@ -244,6 +245,7 @@ export const useRadarStore = defineStore("radar", () => {
         username: ov?.username ?? undefined,
         password: ov?.password ?? undefined,
         database_name: ov?.database_name ?? undefined,
+        dump_method: ov?.dump_method ?? undefined,
       };
     });
 

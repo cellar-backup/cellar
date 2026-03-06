@@ -358,7 +358,7 @@ class DatabaseDumper
 
         $kubectlParts = array_map('escapeshellarg', self::kubectlExecPrefix($kc));
         $fullCmd = implode(' ', $kubectlParts)
-            .' -- sh -c '.escapeshellarg($shellCmd)
+            .' sh -c '.escapeshellarg($shellCmd)
             .' > '.escapeshellarg($outFile);
 
         $result = Process::timeout(21600)->run(['sh', '-c', $fullCmd]);

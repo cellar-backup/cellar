@@ -233,6 +233,30 @@ class SourceController extends Controller
         ]);
     }
 
+    /**
+     * Update the dump method for a Kubernetes-sourced database.
+     *
+     * 'direct'  — dump via psql/mysqldump over the network (LB / external IP).
+     * 'kubectl' — dump via kubectl exec inside the database pod.
+     */
+    public function updateDumpMethod(Request $request, Source $source): JsonResponse
+    {
+        $data = $request->validate([
+            'dump_method' => 'required|string|in:direct,kubectl',
+        ]);
+
+        $extra = $source->extra_config ?? [];
+        $extra['kubernetes'] = array_merge($extra['kubernetes'] ?? [], [
+            'dump_method' => $data['dump_method'],
+        ]);
+        $source->update(['extra_config' => $extra]);
+
+        return response()->json([
+            'extra_config' => $source->extra_config,
+            'message' => 'Dump method updated.',
+        ]);
+    }
+
     // ── Toggle enabled ─────────────────────────────────────────
 
     public function toggle(Source $source): JsonResponse

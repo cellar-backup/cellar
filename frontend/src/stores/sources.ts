@@ -19,6 +19,7 @@ export interface Source {
   archive_count: number;
   last_archive_at: string | null;
   retention_policy: Record<string, number> | null;
+  extra_config: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
@@ -289,6 +290,19 @@ export const useSourcesStore = defineStore("sources", () => {
     }
   }
 
+  async function updateDumpMethod(
+    sourceId: string,
+    dumpMethod: "direct" | "kubectl",
+  ): Promise<void> {
+    const { data } = await api.patch(`/sources/${sourceId}/dump-method`, {
+      dump_method: dumpMethod,
+    });
+    const source = sources.value.find((s) => s.id === sourceId);
+    if (source) {
+      source.extra_config = data.extra_config;
+    }
+  }
+
   return {
     sources,
     loading,
@@ -314,5 +328,6 @@ export const useSourcesStore = defineStore("sources", () => {
     downloadArchive,
     toggleKeepForever,
     updateRetention,
+    updateDumpMethod,
   };
 });
