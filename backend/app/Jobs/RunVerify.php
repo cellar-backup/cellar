@@ -24,15 +24,28 @@ class RunVerify implements ShouldQueue
     public function __construct(
         public string $planId,
         public ?string $archiveId = null,
+        public ?string $jobId = null,
     ) {}
 
     public function handle(): void
     {
         $plan = BackupPlan::with('repository')->findOrFail($this->planId);
 
-        $job = Job::create([
-            'plan_id' => $plan->id,
-            'job_type' => 'verify',
+        // Use pre-created job record (from controller) or create one (legacy/scheduler)
+        $job = $this->jobId
+            ? Job::findOrFail($this->jobId)
+            : Job::create([
+                'plan_id' => $plan->id,
+                'job_type' => 'verify',
+                'status' => 'pending',
+                'progress' => 0,
+            ]);
+
+        if ($job->isCancelled()) {
+            return;
+        }
+
+        $job->update([
             'status' => 'running',
             'started_at' => now(),
             'progress' => 5,

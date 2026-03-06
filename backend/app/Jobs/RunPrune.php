@@ -25,6 +25,7 @@ class RunPrune implements ShouldQueue
     public function __construct(
         public string $planId,
         public bool $dryRun = false,
+        public ?string $jobId = null,
     ) {}
 
     public function handle(): void
@@ -38,9 +39,21 @@ class RunPrune implements ShouldQueue
             return; // Nothing to prune
         }
 
-        $job = Job::create([
-            'plan_id' => $plan->id,
-            'job_type' => 'prune',
+        // Use pre-created job record (from controller) or create one (legacy/scheduler)
+        $job = $this->jobId
+            ? Job::findOrFail($this->jobId)
+            : Job::create([
+                'plan_id' => $plan->id,
+                'job_type' => 'prune',
+                'status' => 'pending',
+                'progress' => 0,
+            ]);
+
+        if ($job->isCancelled()) {
+            return;
+        }
+
+        $job->update([
             'status' => 'running',
             'started_at' => now(),
             'progress' => 5,

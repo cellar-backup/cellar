@@ -189,7 +189,7 @@ export const usePlansStore = defineStore("plans", () => {
   }) {
     const plan = plans.value.find((p) => p.id === event.planId);
 
-    if (event.status === "running") {
+    if (event.status === "running" || event.status === "pending") {
       // Patch running_job progress in-place — no API call needed
       if (plan) {
         if (plan.running_job) {
@@ -236,16 +236,32 @@ export const usePlansStore = defineStore("plans", () => {
 
   async function triggerBackup(planId: string) {
     const { data } = await api.post(`/plans/${planId}/backup`);
-    // Optimistically show running state immediately
+    // Use the real job_id from the API response
     const plan = plans.value.find((p) => p.id === planId);
     if (plan) {
       plan.status = "running";
       plan.running_job = {
-        id: "_pending",
+        id: data.job_id ?? "_pending",
         job_type: "backup",
         progress: 0,
         started_at: new Date().toISOString(),
       };
+    }
+    // Add to jobs list immediately so it appears as "pending"
+    if (data.job_id) {
+      jobs.value.unshift({
+        id: data.job_id,
+        plan: planId,
+        plan_name: plan?.name ?? "",
+        job_type: "backup",
+        status: "pending",
+        progress: 0,
+        started_at: null,
+        finished_at: null,
+        error_message: "",
+        metadata: {},
+        created_at: new Date().toISOString(),
+      });
     }
     return data;
   }
@@ -256,11 +272,26 @@ export const usePlansStore = defineStore("plans", () => {
     if (plan) {
       plan.status = "running";
       plan.running_job = {
-        id: "_pending",
+        id: data.job_id ?? "_pending",
         job_type: "prune",
         progress: 0,
         started_at: new Date().toISOString(),
       };
+    }
+    if (data.job_id) {
+      jobs.value.unshift({
+        id: data.job_id,
+        plan: planId,
+        plan_name: plan?.name ?? "",
+        job_type: "prune",
+        status: "pending",
+        progress: 0,
+        started_at: null,
+        finished_at: null,
+        error_message: "",
+        metadata: {},
+        created_at: new Date().toISOString(),
+      });
     }
     return data;
   }
@@ -271,11 +302,26 @@ export const usePlansStore = defineStore("plans", () => {
     if (plan) {
       plan.status = "running";
       plan.running_job = {
-        id: "_pending",
+        id: data.job_id ?? "_pending",
         job_type: "verify",
         progress: 0,
         started_at: new Date().toISOString(),
       };
+    }
+    if (data.job_id) {
+      jobs.value.unshift({
+        id: data.job_id,
+        plan: planId,
+        plan_name: plan?.name ?? "",
+        job_type: "verify",
+        status: "pending",
+        progress: 0,
+        started_at: null,
+        finished_at: null,
+        error_message: "",
+        metadata: {},
+        created_at: new Date().toISOString(),
+      });
     }
     return data;
   }

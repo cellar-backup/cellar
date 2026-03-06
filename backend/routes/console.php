@@ -3,6 +3,7 @@
 use App\Jobs\RunBackup;
 use App\Jobs\RunPrune;
 use App\Models\BackupPlan;
+use App\Models\Job;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 
@@ -27,7 +28,13 @@ Schedule::call(function () {
         // doesn't support dynamic cron per iteration. So we use a manual
         // cron matcher here.
         if (cronMatchesNow($plan->schedule_cron)) {
-            RunBackup::dispatch($plan->id);
+            $job = Job::create([
+                'plan_id' => $plan->id,
+                'job_type' => 'backup',
+                'status' => 'pending',
+                'progress' => 0,
+            ]);
+            RunBackup::dispatch($plan->id, $job->id);
             $plan->update(['next_run' => nextCronRun($plan->schedule_cron)]);
         }
     }
@@ -43,7 +50,13 @@ Schedule::call(function () {
     foreach ($plans as $plan) {
         $pruneCron = shiftCronMinutes($plan->schedule_cron, 30);
         if (cronMatchesNow($pruneCron)) {
-            RunPrune::dispatch($plan->id);
+            $job = Job::create([
+                'plan_id' => $plan->id,
+                'job_type' => 'prune',
+                'status' => 'pending',
+                'progress' => 0,
+            ]);
+            RunPrune::dispatch($plan->id, false, $job->id);
         }
     }
 })->everyMinute()->name('cellar:dispatch-scheduled-prunes')->withoutOverlapping();

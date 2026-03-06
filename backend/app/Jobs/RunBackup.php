@@ -29,7 +29,10 @@ class RunBackup implements ShouldQueue
      */
     public int $timeout = 28800; // 8 hours
 
-    public function __construct(public string $planId) {}
+    public function __construct(
+        public string $planId,
+        public ?string $jobId = null,
+    ) {}
 
     public function handle(): void
     {
@@ -37,9 +40,22 @@ class RunBackup implements ShouldQueue
         $source = $plan->source;
         $repo = $plan->repository;
 
-        $job = Job::create([
-            'plan_id' => $plan->id,
-            'job_type' => 'backup',
+        // Use pre-created job record (from controller) or create one (legacy/scheduler)
+        $job = $this->jobId
+            ? Job::findOrFail($this->jobId)
+            : Job::create([
+                'plan_id' => $plan->id,
+                'job_type' => 'backup',
+                'status' => 'pending',
+                'progress' => 0,
+            ]);
+
+        // Check if already cancelled before starting
+        if ($job->isCancelled()) {
+            return;
+        }
+
+        $job->update([
             'status' => 'running',
             'started_at' => now(),
             'progress' => 5,

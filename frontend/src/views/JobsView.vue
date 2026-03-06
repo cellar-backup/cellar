@@ -128,6 +128,8 @@ function statusIcon(status: string) {
       return Loader2;
     case "cancelled":
       return Ban;
+    case "pending":
+      return Clock;
     default:
       return Clock;
   }
@@ -143,6 +145,8 @@ function statusClass(status: string) {
       return "text-info";
     case "cancelled":
       return "text-warning";
+    case "pending":
+      return "text-text-muted";
     default:
       return "text-text-muted";
   }
@@ -158,6 +162,8 @@ function badgeClass(status: string) {
       return "bg-info/10 text-info";
     case "cancelled":
       return "bg-warning/10 text-warning";
+    case "pending":
+      return "bg-surface-raised text-text-muted";
     default:
       return "bg-surface-raised text-text-muted";
   }
@@ -180,6 +186,23 @@ function typeLabel(type: string) {
   }
 }
 
+function statusLabel(status: string) {
+  switch (status) {
+    case "pending":
+      return "Queued";
+    case "running":
+      return "Running";
+    case "success":
+      return "Success";
+    case "failed":
+      return "Failed";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return status;
+  }
+}
+
 function fmtDate(dateStr: string | null) {
   if (!dateStr) return "—";
   return new Date(dateStr).toLocaleString();
@@ -196,12 +219,12 @@ function duration(start: string | null, end: string | null) {
   return `${mins}m ${rem}s`;
 }
 
-async function confirmCancel(jobId: string, jobType: string) {
+async function confirmCancel(jobId: string, jobType: string, status: string) {
+  const action =
+    status === "pending" ? "Cancel the queued" : "Cancel the running";
   if (
     !confirm(
-      "Cancel the running " +
-        typeLabel(jobType) +
-        " job? This action cannot be undone.",
+      action + " " + typeLabel(jobType) + " job? This action cannot be undone.",
     )
   )
     return;
@@ -270,7 +293,7 @@ async function confirmCancel(jobId: string, jobType: string) {
                     job.status === 'running' ? 'animate-spin' : '',
                   ]"
                 />
-                {{ job.status }}
+                {{ statusLabel(job.status) }}
               </span>
             </td>
             <td class="px-5 py-3 text-text-primary">
@@ -307,6 +330,11 @@ async function confirmCancel(jobId: string, jobType: string) {
                 class="text-xs text-success"
                 >100%</span
               >
+              <span
+                v-else-if="job.status === 'pending'"
+                class="text-xs text-text-muted italic"
+                >Queued</span
+              >
               <span v-else class="text-xs text-text-muted">—</span>
             </td>
             <td class="px-5 py-3 max-w-xs truncate text-text-muted">
@@ -330,7 +358,7 @@ async function confirmCancel(jobId: string, jobType: string) {
                   v-if="job.status === 'running' || job.status === 'pending'"
                   class="rounded p-1 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors"
                   title="Cancel job"
-                  @click="confirmCancel(job.id, job.job_type)"
+                  @click="confirmCancel(job.id, job.job_type, job.status)"
                 >
                   <Ban class="h-4 w-4" />
                 </button>

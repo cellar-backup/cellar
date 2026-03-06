@@ -97,10 +97,18 @@ class ArchiveController extends Controller
      */
     public function restore(Archive $archive): JsonResponse
     {
-        RunRestore::dispatch($archive->id);
+        $job = Job::create([
+            'plan_id' => $archive->plan_id,
+            'job_type' => 'restore',
+            'status' => 'pending',
+            'progress' => 0,
+        ]);
+
+        RunRestore::dispatch($archive->id, $job->id);
 
         return response()->json([
             'detail' => 'Restore job queued.',
+            'job_id' => $job->id,
         ], 202);
     }
 

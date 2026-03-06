@@ -22,11 +22,9 @@ class RunRestore implements ShouldQueue
 
     public int $timeout = 7200;
 
-    /**
-     * @param  string  $archiveRecordId  UUID of the Archive model record
-     */
     public function __construct(
         public string $archiveRecordId,
+        public ?string $jobId = null,
     ) {}
 
     public function handle(): void
@@ -36,9 +34,21 @@ class RunRestore implements ShouldQueue
         $source = $plan->source;
         $repo = $plan->repository;
 
-        $job = Job::create([
-            'plan_id' => $plan->id,
-            'job_type' => 'restore',
+        // Use pre-created job record (from controller) or create one (legacy)
+        $job = $this->jobId
+            ? Job::findOrFail($this->jobId)
+            : Job::create([
+                'plan_id' => $plan->id,
+                'job_type' => 'restore',
+                'status' => 'pending',
+                'progress' => 0,
+            ]);
+
+        if ($job->isCancelled()) {
+            return;
+        }
+
+        $job->update([
             'status' => 'running',
             'started_at' => now(),
             'progress' => 5,

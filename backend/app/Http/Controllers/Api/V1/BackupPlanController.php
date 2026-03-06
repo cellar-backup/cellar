@@ -118,10 +118,18 @@ class BackupPlanController extends Controller
 
     public function backup(BackupPlan $plan): JsonResponse
     {
-        RunBackup::dispatch($plan->id);
+        $job = Job::create([
+            'plan_id' => $plan->id,
+            'job_type' => 'backup',
+            'status' => 'pending',
+            'progress' => 0,
+        ]);
+
+        RunBackup::dispatch($plan->id, $job->id);
 
         return response()->json([
             'detail' => 'Backup job queued.',
+            'job_id' => $job->id,
         ], 202);
     }
 
@@ -131,10 +139,18 @@ class BackupPlanController extends Controller
             'archive_id' => 'required|string|exists:archives,id',
         ]);
 
-        RunRestore::dispatch($data['archive_id']);
+        $job = Job::create([
+            'plan_id' => $plan->id,
+            'job_type' => 'restore',
+            'status' => 'pending',
+            'progress' => 0,
+        ]);
+
+        RunRestore::dispatch($data['archive_id'], $job->id);
 
         return response()->json([
             'detail' => 'Restore job queued.',
+            'job_id' => $job->id,
         ], 202);
     }
 
@@ -142,10 +158,18 @@ class BackupPlanController extends Controller
     {
         $dryRun = $request->boolean('dry_run', false);
 
-        RunPrune::dispatch($plan->id, $dryRun);
+        $job = Job::create([
+            'plan_id' => $plan->id,
+            'job_type' => 'prune',
+            'status' => 'pending',
+            'progress' => 0,
+        ]);
+
+        RunPrune::dispatch($plan->id, $dryRun, $job->id);
 
         return response()->json([
             'detail' => $dryRun ? 'Prune dry-run job queued.' : 'Prune job queued.',
+            'job_id' => $job->id,
         ], 202);
     }
 
@@ -153,10 +177,18 @@ class BackupPlanController extends Controller
     {
         $archiveId = $request->input('archive_id');
 
-        RunVerify::dispatch($plan->id, $archiveId);
+        $job = Job::create([
+            'plan_id' => $plan->id,
+            'job_type' => 'verify',
+            'status' => 'pending',
+            'progress' => 0,
+        ]);
+
+        RunVerify::dispatch($plan->id, $archiveId, $job->id);
 
         return response()->json([
             'detail' => 'Verify job queued.',
+            'job_id' => $job->id,
         ], 202);
     }
 
