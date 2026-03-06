@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/borger/cellar/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/borger/cellar/ci.yml?branch=main&style=flat-square" alt="CI" /></a>
+  <a href="https://github.com/cellar-backup/cellar/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/cellar-backup/cellar/ci.yml?branch=main&style=flat-square" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="License" /></a>
-  <a href="https://github.com/borger/cellar/releases"><img src="https://img.shields.io/github/v/release/borger/cellar?style=flat-square&color=6C5CE7" alt="Release" /></a>
-  <a href="https://hub.docker.com/r/borger/cellar"><img src="https://img.shields.io/docker/pulls/borger/cellar?style=flat-square" alt="Docker Pulls" /></a>
+  <a href="https://github.com/cellar-backup/cellar/releases"><img src="https://img.shields.io/github/v/release/cellar-backup/cellar?style=flat-square&color=6C5CE7" alt="Release" /></a>
+  <a href="https://github.com/cellar-backup/cellar/pkgs/container/cellar"><img src="https://img.shields.io/badge/ghcr.io-cellar--backup%2Fcellar-blue?style=flat-square&logo=docker" alt="Container" /></a>
 </p>
 
 <p align="center">
@@ -36,7 +36,7 @@ Existing backup tools force you to choose between **power** (borgmatic, restic C
 
 ```bash
 # Clone the repo
-git clone https://github.com/borger/cellar.git
+git clone https://github.com/cellar-backup/cellar.git
 cd cellar
 
 # Launch (that's it — zero config required)

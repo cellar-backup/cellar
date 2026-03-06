@@ -91,7 +91,7 @@ Optional longer description.
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/borger/cellar/issues) with the appropriate template:
+Use [GitHub Issues](https://github.com/cellar-backup/cellar/issues) with the appropriate template:
 
 - **Bug Report** — something is broken
 - **Feature Request** — suggest an improvement

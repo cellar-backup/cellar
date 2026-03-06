@@ -9,7 +9,7 @@
 
 **Cellar** is an open-source, container-native backup management platform for HomeLab operators. It provides deduplication-first backups (via BorgBackup/restic), database + filesystem support, custom backup documents, and a modern Vue 3 UI.
 
-- **Repo:** `github.com/borger/cellar`
+- **Repo:** `github.com/cellar-backup/cellar`
 - **License:** Apache 2.0
 - **Default port:** 8420
 - **Default credentials:** `admin` / `changeme` (seeded via `cellar:seed-defaults`)
