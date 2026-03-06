@@ -23,6 +23,7 @@ class SeedDefaults extends Command
 
             User::create([
                 'name' => $name,
+                'username' => strtolower(str_replace(' ', '', $name)),
                 'email' => $email,
                 'password' => $password,  // Hashed automatically by User model's 'hashed' cast
             ]);

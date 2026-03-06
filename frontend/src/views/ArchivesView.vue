@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { usePlansStore } from "@/stores/plans";
+import { useConfirm } from "@/composables/useConfirm";
 import {
   Archive,
   HardDrive,
@@ -9,9 +10,12 @@ import {
   Loader2,
   Pin,
   PinOff,
+  Tag,
+  Trash2,
 } from "lucide-vue-next";
 
 const store = usePlansStore();
+const { confirm } = useConfirm();
 
 onMounted(() => {
   store.fetchArchives();
@@ -26,9 +30,13 @@ const actionMessage = ref<{
 
 async function restoreArchive(archiveId: string) {
   if (
-    !confirm(
-      "This will restore the database to the state captured in this archive. Existing data will be overwritten. Continue?",
-    )
+    !(await confirm({
+      title: "Restore Archive",
+      message:
+        "This will restore the database to the state captured in this archive. Existing data will be overwritten. Continue?",
+      confirmLabel: "Restore",
+      variant: "warning",
+    }))
   ) {
     return;
   }
@@ -112,6 +120,66 @@ async function togglePin(arc: { id: string; keep_forever: boolean }) {
     pinLoading.value = null;
   }
 }
+
+// ── Tag management ────────────────────────────
+const tagEditId = ref<string | null>(null);
+const tagInput = ref("");
+
+function openTagEditor(arc: { id: string; tags?: string[] }) {
+  tagEditId.value = arc.id;
+  tagInput.value = (arc.tags ?? []).join(", ");
+}
+
+async function saveTags(arcId: string) {
+  const tags = tagInput.value
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+  try {
+    await store.updateArchiveTags(arcId, tags);
+  } catch {
+    actionMessage.value = {
+      archiveId: arcId,
+      text: "Failed to update tags.",
+      ok: false,
+    };
+  }
+  tagEditId.value = null;
+}
+
+// ── Delete archive ────────────────────────────
+async function deleteArchive(archiveId: string) {
+  if (
+    !(await confirm({
+      title: "Delete Archive",
+      message:
+        "This will permanently remove this archive snapshot. This action cannot be undone.",
+      confirmLabel: "Delete",
+      variant: "danger",
+    }))
+  ) {
+    return;
+  }
+
+  actionLoading.value = archiveId;
+  actionMessage.value = null;
+  try {
+    await store.deleteArchive(archiveId);
+    actionMessage.value = {
+      archiveId,
+      text: "Archive deleted.",
+      ok: true,
+    };
+  } catch {
+    actionMessage.value = {
+      archiveId,
+      text: "Failed to delete archive.",
+      ok: false,
+    };
+  } finally {
+    actionLoading.value = null;
+  }
+}
 </script>
 
 <template>
@@ -154,7 +222,7 @@ async function togglePin(arc: { id: string; keep_forever: boolean }) {
             <th class="px-5 py-3 font-medium">Created</th>
             <th class="px-5 py-3 font-medium">Size</th>
             <th class="px-5 py-3 font-medium">Deduplicated</th>
-            <th class="px-5 py-3 font-medium text-right">Actions</th>
+            <th class="px-5 py-3 font-medium">Actions</th>
           </tr>
         </thead>
         <TransitionGroup name="table-row" tag="tbody">
@@ -187,8 +255,57 @@ async function togglePin(arc: { id: string; keep_forever: boolean }) {
             <td class="px-5 py-3 text-text-muted">
               {{ fmtSize(arc.size_dedup) }}
             </td>
-            <td class="px-5 py-3 text-right">
-              <div class="flex items-center justify-end gap-1.5">
+            <td class="px-5 py-3">
+              <!-- Tags row -->
+              <div
+                v-if="arc.tags && arc.tags.length > 0 && tagEditId !== arc.id"
+                class="mb-1.5 flex flex-wrap gap-1"
+              >
+                <span
+                  v-for="tag in arc.tags"
+                  :key="tag"
+                  class="inline-flex items-center gap-0.5 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent"
+                >
+                  <Tag class="h-2.5 w-2.5" />{{ tag }}
+                </span>
+              </div>
+              <!-- Tag editor inline -->
+              <div
+                v-if="tagEditId === arc.id"
+                class="mb-1.5 flex items-center gap-1.5"
+              >
+                <input
+                  v-model="tagInput"
+                  class="flex-1 rounded-lg border border-border bg-surface px-2 py-1 text-xs text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder="tag1, tag2, …"
+                  @keydown.enter="saveTags(arc.id)"
+                  @keydown.escape="tagEditId = null"
+                />
+                <button
+                  class="rounded-lg bg-primary px-2 py-1 text-xs font-medium text-white hover:bg-primary/90 transition-colors"
+                  @click="saveTags(arc.id)"
+                >
+                  Save
+                </button>
+                <button
+                  class="rounded-lg border border-border px-2 py-1 text-xs font-medium text-text-muted hover:bg-surface-raised transition-colors"
+                  @click="tagEditId = null"
+                >
+                  Cancel
+                </button>
+              </div>
+              <!-- Action buttons: tag, pin, export, restore, delete -->
+              <div class="flex items-center gap-1.5">
+                <!-- Tag -->
+                <button
+                  class="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-raised transition-colors"
+                  title="Edit tags"
+                  @click="openTagEditor(arc)"
+                >
+                  <Tag class="h-3.5 w-3.5" />
+                  Tag
+                </button>
+                <!-- Pin -->
                 <button
                   :disabled="pinLoading === arc.id"
                   class="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
@@ -208,6 +325,17 @@ async function togglePin(arc: { id: string; keep_forever: boolean }) {
                   <PinOff v-else class="h-3.5 w-3.5" />
                   {{ arc.keep_forever ? "Unpin" : "Pin" }}
                 </button>
+                <!-- Export -->
+                <button
+                  :disabled="actionLoading === arc.id"
+                  class="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-raised transition-colors disabled:opacity-50"
+                  title="Download the dump file"
+                  @click="exportArchive(arc.id)"
+                >
+                  <Download class="h-3.5 w-3.5" />
+                  Export
+                </button>
+                <!-- Restore -->
                 <button
                   :disabled="actionLoading === arc.id"
                   class="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
@@ -217,14 +345,15 @@ async function togglePin(arc: { id: string; keep_forever: boolean }) {
                   <RotateCcw class="h-3.5 w-3.5" />
                   Restore
                 </button>
+                <!-- Delete -->
                 <button
                   :disabled="actionLoading === arc.id"
-                  class="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-raised transition-colors disabled:opacity-50"
-                  title="Download the dump file"
-                  @click="exportArchive(arc.id)"
+                  class="flex items-center gap-1 rounded-lg border border-danger/30 px-2.5 py-1.5 text-xs font-medium text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
+                  title="Delete this archive permanently"
+                  @click="deleteArchive(arc.id)"
                 >
-                  <Download class="h-3.5 w-3.5" />
-                  Export
+                  <Trash2 class="h-3.5 w-3.5" />
+                  Delete
                 </button>
                 <Loader2
                   v-if="actionLoading === arc.id"
@@ -236,9 +365,9 @@ async function togglePin(arc: { id: string; keep_forever: boolean }) {
               <div
                 v-if="actionMessage?.archiveId === arc.id"
                 class="mt-1.5 text-xs"
-                :class="actionMessage.ok ? 'text-success' : 'text-danger'"
+                :class="actionMessage?.ok ? 'text-success' : 'text-danger'"
               >
-                {{ actionMessage.text }}
+                {{ actionMessage?.text }}
               </div>
             </td>
           </tr>

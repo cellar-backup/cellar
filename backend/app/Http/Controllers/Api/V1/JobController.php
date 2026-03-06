@@ -13,7 +13,7 @@ class JobController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Job::with('plan')->orderByDesc('created_at');
+        $query = Job::with('plan.source')->orderByDesc('created_at');
 
         if ($request->has('plan')) {
             $query->where('plan_id', $request->input('plan'));
@@ -31,6 +31,8 @@ class JobController extends Controller
         $jobs->getCollection()->transform(function (Job $job) {
             $data = $job->toArray();
             $data['plan_name'] = $job->plan_name;
+            $data['source_name'] = $job->source_name;
+            $data['source_id'] = $job->source_id;
 
             return $data;
         });
@@ -40,8 +42,12 @@ class JobController extends Controller
 
     public function show(Job $job): JsonResponse
     {
+        $job->load('plan.source');
+
         return response()->json(array_merge($job->toArray(), [
             'plan_name' => $job->plan_name,
+            'source_name' => $job->source_name,
+            'source_id' => $job->source_id,
         ]));
     }
 

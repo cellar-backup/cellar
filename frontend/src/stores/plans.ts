@@ -29,6 +29,8 @@ export interface Job {
   id: string;
   plan: string;
   plan_name: string;
+  source_name: string;
+  source_id: string;
   job_type: string;
   status: string;
   progress: number;
@@ -50,6 +52,8 @@ export interface Archive {
   size_compressed: number;
   file_count: number;
   keep_forever: boolean;
+  tags: string[];
+  notes: string | null;
   created_at: string;
 }
 
@@ -86,6 +90,19 @@ export const usePlansStore = defineStore("plans", () => {
       plans.value.some((p: BackupPlan) => p.status === "running") ||
       jobs.value.some((j: Job) => j.status === "running"),
   );
+
+  /** Jobs sorted: running/pending first, then by created_at desc. */
+  const sortedJobs = computed(() => {
+    const active = ["running", "pending"];
+    return [...jobs.value].sort((a, b) => {
+      const aActive = active.includes(a.status) ? 0 : 1;
+      const bActive = active.includes(b.status) ? 0 : 1;
+      if (aActive !== bActive) return aActive - bActive;
+      return (
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    });
+  });
 
   /**
    * Patch an existing reactive array IN-PLACE so Vue's reactivity system
@@ -185,6 +202,8 @@ export const usePlansStore = defineStore("plans", () => {
     finishedAt: string | null;
     errorMessage: string | null;
     planName?: string;
+    sourceName?: string;
+    sourceId?: string;
     createdAt?: string;
   }) {
     const plan = plans.value.find((p) => p.id === event.planId);
@@ -216,6 +235,8 @@ export const usePlansStore = defineStore("plans", () => {
           id: event.jobId,
           plan: event.planId,
           plan_name: event.planName ?? "",
+          source_name: event.sourceName ?? "",
+          source_id: event.sourceId ?? "",
           job_type: event.jobType,
           status: event.status,
           progress: event.progress,
@@ -253,6 +274,8 @@ export const usePlansStore = defineStore("plans", () => {
         id: data.job_id,
         plan: planId,
         plan_name: plan?.name ?? "",
+        source_name: plan?.source_name ?? "",
+        source_id: "",
         job_type: "backup",
         status: "pending",
         progress: 0,
@@ -283,6 +306,8 @@ export const usePlansStore = defineStore("plans", () => {
         id: data.job_id,
         plan: planId,
         plan_name: plan?.name ?? "",
+        source_name: plan?.source_name ?? "",
+        source_id: "",
         job_type: "prune",
         status: "pending",
         progress: 0,
@@ -313,6 +338,8 @@ export const usePlansStore = defineStore("plans", () => {
         id: data.job_id,
         plan: planId,
         plan_name: plan?.name ?? "",
+        source_name: plan?.source_name ?? "",
+        source_id: "",
         job_type: "verify",
         status: "pending",
         progress: 0,
@@ -407,6 +434,22 @@ export const usePlansStore = defineStore("plans", () => {
     await Promise.all([fetchPlans(), fetchJobs()]);
   }
 
+  async function deleteArchive(archiveId: string): Promise<void> {
+    await api.delete(`/archives/${archiveId}`);
+    archives.value = archives.value.filter((a) => a.id !== archiveId);
+  }
+
+  async function updateArchiveTags(
+    archiveId: string,
+    tags: string[],
+  ): Promise<void> {
+    const { data } = await api.put(`/archives/${archiveId}`, { tags });
+    const arc = archives.value.find((a) => a.id === archiveId);
+    if (arc) {
+      arc.tags = data.tags ?? tags;
+    }
+  }
+
   return {
     plans,
     jobs,
@@ -415,6 +458,7 @@ export const usePlansStore = defineStore("plans", () => {
     loading,
     error,
     hasRunningJobs,
+    sortedJobs,
     fetchPlans,
     fetchJobs,
     fetchArchives,
@@ -428,6 +472,8 @@ export const usePlansStore = defineStore("plans", () => {
     fetchJobLog,
     toggleKeepForever,
     cancelJob,
+    deleteArchive,
+    updateArchiveTags,
     handleJobEvent,
   };
 });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
 import {
   Database,
   FolderOpen,
@@ -37,6 +37,7 @@ import {
 } from "@/stores/sources";
 import { usePlansStore } from "@/stores/plans";
 import { useJobsChannel } from "@/composables/useJobsChannel";
+import { useConfirm } from "@/composables/useConfirm";
 
 const DB_TYPES = [
   { value: "postgresql", label: "PostgreSQL", defaultPort: 5432, isDb: true },
@@ -59,6 +60,7 @@ const FS_TYPES = [
 const ALL_TYPES = [...DB_TYPES, ...FS_TYPES];
 const store = useSourcesStore();
 const plansStore = usePlansStore();
+const { confirm } = useConfirm();
 useJobsChannel();
 onMounted(() => {
   store.fetchSources();
@@ -349,9 +351,8 @@ async function saveEdit() {
     const payload: Record<string, unknown> = { ...editForm.value };
     if (!payload.password) delete payload.password;
     await store.updateSource(editSourceId.value, payload);
-    editSuccess.value = true;
     await store.fetchSources();
-    setTimeout(() => (editSuccess.value = false), 3000);
+    closeEdit();
   } catch (e: unknown) {
     if (e && typeof e === "object" && "response" in e) {
       const resp = (e as { response: { data: unknown } }).response;
@@ -393,7 +394,12 @@ async function editDeleteSource() {
   const name = editForm.value.name;
   const id = editSourceId.value;
   if (
-    !confirm("Delete source \u201c" + name + "\u201d? This cannot be undone.")
+    !(await confirm({
+      title: "Delete Source",
+      message: `Delete source \u201c${name}\u201d? This cannot be undone.`,
+      confirmLabel: "Delete",
+      variant: "danger",
+    }))
   )
     return;
   await store.deleteSource(id);
@@ -559,7 +565,12 @@ async function savePolicy() {
 
 async function deletePolicy(policyId: string, name: string) {
   if (
-    !confirm("Delete policy \u201c" + name + "\u201d? This cannot be undone.")
+    !(await confirm({
+      title: "Delete Schedule",
+      message: `Delete schedule \u201c${name}\u201d? This cannot be undone.`,
+      confirmLabel: "Delete",
+      variant: "danger",
+    }))
   )
     return;
   await store.deletePolicy(policyId);
@@ -603,10 +614,7 @@ async function saveRetention() {
   retentionSuccess.value = false;
   try {
     await store.updateRetention(retentionSourceId.value, retentionForm.value);
-    retentionSuccess.value = true;
-    setTimeout(() => {
-      retentionSuccess.value = false;
-    }, 3000);
+    closeRetention();
   } catch {
   } finally {
     retentionSaving.value = false;
@@ -653,6 +661,32 @@ const editingArchive = ref<string | null>(null);
 const archiveTagInput = ref("");
 const archiveNotesInput = ref("");
 
+// Auto-refresh timeline when any job finishes (prune, backup, etc.)
+// The plansStore.jobs array gets patched in-place via WebSocket events.
+// We watch it deeply so that when a job status flips to terminal, we re-fetch.
+watch(
+  () => plansStore.jobs.map((j) => j.status),
+  async (newStatuses, oldStatuses) => {
+    if (!showTimeline.value || !timelineSourceId.value) return;
+    // If any status changed to a terminal state, refresh
+    const terminal = ["success", "failed", "cancelled"];
+    const changed = newStatuses.some(
+      (s, i) => terminal.includes(s) && oldStatuses?.[i] !== s,
+    );
+    if (changed) {
+      try {
+        timelineArchives.value = await store.fetchSourceArchives(
+          timelineSourceId.value,
+        );
+        // Also refresh source cards (archive counts, last backup time, etc.)
+        await store.fetchSources();
+      } catch {
+        // silent
+      }
+    }
+  },
+);
+
 async function openTimeline(
   sourceId: string,
   name: string,
@@ -680,7 +714,14 @@ function closeTimeline() {
 }
 
 async function timelineRestore(archiveId: string) {
-  if (!confirm("Restore this archive? Existing data may be overwritten."))
+  if (
+    !(await confirm({
+      title: "Restore Archive",
+      message: "Restore this archive? Existing data may be overwritten.",
+      confirmLabel: "Restore",
+      variant: "warning",
+    }))
+  )
     return;
   timelineActionLoading.value = archiveId;
   timelineActionMsg.value = null;
@@ -723,7 +764,14 @@ async function timelineExport(archiveId: string) {
 }
 
 async function timelineDelete(archiveId: string) {
-  if (!confirm("Delete this archive permanently? This cannot be undone."))
+  if (
+    !(await confirm({
+      title: "Delete Archive",
+      message: "Delete this archive permanently? This cannot be undone.",
+      confirmLabel: "Delete",
+      variant: "danger",
+    }))
+  )
     return;
   timelineActionLoading.value = archiveId;
   try {
@@ -920,9 +968,13 @@ function closeLog() {
 // == CANCEL JOB WITH CONFIRMATION ==
 async function cancelJob(jobId: string, jobType: string) {
   if (
-    !confirm(
-      "Cancel the running " + jobType + " job? This action cannot be undone.",
-    )
+    !(await confirm({
+      title: "Cancel Job",
+      message:
+        "Cancel the running " + jobType + " job? This action cannot be undone.",
+      confirmLabel: "Cancel Job",
+      variant: "warning",
+    }))
   )
     return;
   try {
@@ -1301,33 +1353,14 @@ async function cancelJob(jobId: string, jobType: string) {
                           >
                         </p>
                       </div>
-                      <!-- Actions (visible on hover) -->
-                      <div
-                        class="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/item:opacity-100 transition-opacity"
-                      >
-                        <button
-                          class="rounded p-1 text-text-muted hover:text-primary hover:bg-primary/10 transition-colors"
-                          title="Restore"
-                          :disabled="timelineActionLoading === arc.id"
-                          @click="timelineRestore(arc.id)"
-                        >
-                          <RotateCcw class="h-3.5 w-3.5" />
-                        </button>
+                      <!-- Actions (always visible) -->
+                      <div class="flex items-center gap-0.5 shrink-0">
                         <button
                           class="rounded p-1 text-text-muted hover:text-text-primary hover:bg-surface transition-colors"
-                          title="Download"
-                          :disabled="timelineActionLoading === arc.id"
-                          @click="timelineExport(arc.id)"
+                          title="Tag / Note"
+                          @click="startEditArchive(arc)"
                         >
-                          <Download class="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          class="rounded p-1 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors"
-                          title="Delete"
-                          :disabled="timelineActionLoading === arc.id"
-                          @click="timelineDelete(arc.id)"
-                        >
-                          <Trash2 class="h-3.5 w-3.5" />
+                          <Tag class="h-3.5 w-3.5" />
                         </button>
                         <button
                           class="rounded p-1 transition-colors"
@@ -1344,10 +1377,27 @@ async function cancelJob(jobId: string, jobType: string) {
                         </button>
                         <button
                           class="rounded p-1 text-text-muted hover:text-text-primary hover:bg-surface transition-colors"
-                          title="Tag / Note"
-                          @click="startEditArchive(arc)"
+                          title="Download"
+                          :disabled="timelineActionLoading === arc.id"
+                          @click="timelineExport(arc.id)"
                         >
-                          <Tag class="h-3.5 w-3.5" />
+                          <Download class="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          class="rounded p-1 text-text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                          title="Restore"
+                          :disabled="timelineActionLoading === arc.id"
+                          @click="timelineRestore(arc.id)"
+                        >
+                          <RotateCcw class="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          class="rounded p-1 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors"
+                          title="Delete"
+                          :disabled="timelineActionLoading === arc.id"
+                          @click="timelineDelete(arc.id)"
+                        >
+                          <Trash2 class="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </div>

@@ -7,6 +7,7 @@ import {
   type RadarCluster,
   type ImportOverride,
 } from "@/stores/radar";
+import { useConfirm } from "@/composables/useConfirm";
 import {
   Radar,
   Database,
@@ -29,6 +30,7 @@ import {
 } from "lucide-vue-next";
 
 const store = useRadarStore();
+const { confirm } = useConfirm();
 
 // ── Cluster form state ──
 const showClusterForm = ref(false);
@@ -189,7 +191,15 @@ async function submitClusterForm() {
 }
 
 async function confirmDeleteCluster(cluster: RadarCluster) {
-  if (!confirm(`Delete cluster "${cluster.name}" and its ignore list?`)) return;
+  if (
+    !(await confirm({
+      title: "Delete Cluster",
+      message: `Delete cluster \u201c${cluster.name}\u201d and its ignore list?`,
+      confirmLabel: "Delete",
+      variant: "danger",
+    }))
+  )
+    return;
   await store.deleteCluster(cluster.id);
 }
 

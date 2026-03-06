@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\KubernetesController;
 use App\Http\Controllers\Api\V1\NotificationChannelController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\RepositoryController;
+use App\Http\Controllers\Api\V1\SetupController;
 use App\Http\Controllers\Api\V1\SettingsController;
 use App\Http\Controllers\Api\V1\SourceController;
 use App\Http\Controllers\Api\V1\SystemController;
@@ -29,6 +30,7 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function () {
 
     Route::post('auth/login', [AuthController::class, 'login']);
+    Route::post('setup', [SetupController::class, 'store']);
     Route::get('system/health', [SystemController::class, 'health']);
 
     // ── Authenticated ───────────────────────────────────────────────────

@@ -3,6 +3,9 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { usePlansStore, type Job } from "@/stores/plans";
+import { useSourcesStore } from "@/stores/sources";
+import { useConfirm } from "@/composables/useConfirm";
+import JobLogModal from "@/components/JobLogModal.vue";
 import echo from "@/lib/echo";
 import {
   LayoutDashboard,
@@ -17,6 +20,12 @@ import {
   CircleX,
   Loader2,
   Clock,
+  FileText,
+  Ban,
+  HardDriveDownload,
+  Scissors,
+  ShieldCheck,
+  RotateCcw,
 } from "lucide-vue-next";
 
 const collapsed = ref(false);
@@ -24,6 +33,8 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const plansStore = usePlansStore();
+const sourcesStore = useSourcesStore();
+const { confirm } = useConfirm();
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, to: "/" },
@@ -50,6 +61,7 @@ let tickTimer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(() => {
   plansStore.fetchJobs();
+  sourcesStore.fetchSources();
 
   // Subscribe to WebSocket for real-time job updates
   echo
@@ -66,6 +78,8 @@ onMounted(() => {
         finishedAt: string | null;
         errorMessage: string | null;
         planName?: string;
+        sourceName?: string;
+        sourceId?: string;
         createdAt?: string;
       }) => {
         plansStore.handleJobEvent(event);
@@ -82,7 +96,9 @@ onUnmounted(() => {
   if (tickTimer) clearInterval(tickTimer);
 });
 
-const recentJobs = computed(() => plansStore.jobs.slice(0, 5));
+const recentJobs = computed(() =>
+  plansStore.sortedJobs.filter((j) => j.status !== "pending").slice(0, 5),
+);
 
 function jobStatusIcon(status: string) {
   if (status === "running") return Loader2;
@@ -108,6 +124,22 @@ function jobTypeLabel(type: string) {
   return map[type] ?? type;
 }
 
+function jobTypeIcon(type: string) {
+  if (type === "backup") return HardDriveDownload;
+  if (type === "prune") return Scissors;
+  if (type === "verify") return ShieldCheck;
+  if (type === "restore") return RotateCcw;
+  return HardDriveDownload;
+}
+
+function jobTypeColor(type: string) {
+  if (type === "backup") return "text-info";
+  if (type === "prune") return "text-warning";
+  if (type === "verify") return "text-accent";
+  if (type === "restore") return "text-success";
+  return "text-text-muted";
+}
+
 function timeAgo(iso: string | null) {
   if (!iso) return "";
   const diff = now.value - new Date(iso).getTime();
@@ -131,6 +163,47 @@ function elapsed(job: Job) {
   const m = Math.floor(s / 60);
   const rs = s % 60;
   return `${m}m ${rs}s`;
+}
+
+function resolveSourceName(job: Job): string {
+  if (job.source_id) {
+    const src = sourcesStore.sources.find((s) => s.id === job.source_id);
+    if (src) return src.display_label;
+  }
+  return job.source_name || job.plan_name || "Job";
+}
+
+const logJobId = ref<string | null>(null);
+const logJobLabel = ref("");
+
+function openJobLog(job: Job) {
+  logJobId.value = job.id;
+  logJobLabel.value = resolveSourceName(job);
+}
+
+function closeJobLog() {
+  logJobId.value = null;
+  logJobLabel.value = "";
+}
+
+async function cancelJob(job: Job) {
+  const typeMap: Record<string, string> = {
+    backup: "Backup",
+    prune: "Prune",
+    verify: "Verify",
+    restore: "Restore",
+  };
+  const label = typeMap[job.job_type] ?? job.job_type;
+  if (
+    !(await confirm({
+      title: "Cancel Job",
+      message: `Cancel the ${job.status === "pending" ? "queued" : "running"} ${label} job? This action cannot be undone.`,
+      confirmLabel: "Cancel Job",
+      variant: "warning",
+    }))
+  )
+    return;
+  await plansStore.cancelJob(job.id);
 }
 </script>
 
@@ -186,11 +259,10 @@ function elapsed(job: Job) {
         >
       </div>
       <div class="space-y-0.5">
-        <RouterLink
+        <div
           v-for="job in recentJobs"
           :key="job.id"
-          to="/jobs"
-          class="group flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-surface-raised"
+          class="group flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors hover:bg-surface-raised cursor-default"
         >
           <!-- Status icon -->
           <component
@@ -201,18 +273,20 @@ function elapsed(job: Job) {
               job.status === 'running' ? 'animate-spin' : '',
             ]"
           />
+          <!-- Job type icon -->
+          <component
+            :is="jobTypeIcon(job.job_type)"
+            class="h-3 w-3 shrink-0"
+            :class="jobTypeColor(job.job_type)"
+            :title="jobTypeLabel(job.job_type)"
+          />
           <!-- Info -->
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-1">
-              <span
-                class="truncate text-[11px] font-medium text-text-primary leading-tight"
-              >
-                {{ job.plan_name || "Job" }}
-              </span>
-              <span class="shrink-0 text-[10px] text-text-muted">{{
-                jobTypeLabel(job.job_type)
-              }}</span>
-            </div>
+            <span
+              class="block truncate text-[11px] font-medium text-text-primary leading-tight"
+            >
+              {{ resolveSourceName(job) }}
+            </span>
             <!-- Progress bar for running jobs -->
             <div
               v-if="job.status === 'running'"
@@ -243,7 +317,25 @@ function elapsed(job: Job) {
               </span>
             </div>
           </div>
-        </RouterLink>
+          <!-- Action buttons (always visible) -->
+          <div class="shrink-0 flex items-center gap-0.5">
+            <button
+              class="rounded p-1 text-text-muted hover:text-text-primary hover:bg-surface transition-colors"
+              title="View log"
+              @click.stop="openJobLog(job)"
+            >
+              <FileText class="h-3.5 w-3.5" />
+            </button>
+            <button
+              v-if="job.status === 'running' || job.status === 'pending'"
+              class="rounded p-1 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors"
+              title="Cancel job"
+              @click.stop="cancelJob(job)"
+            >
+              <Ban class="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -269,4 +361,7 @@ function elapsed(job: Job) {
       />
     </button>
   </aside>
+
+  <!-- Log viewer modal (in-place, no navigation) -->
+  <JobLogModal :job-id="logJobId" :label="logJobLabel" @close="closeJobLog" />
 </template>

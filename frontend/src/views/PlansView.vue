@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref, nextTick } from "vue";
 import { usePlansStore } from "@/stores/plans";
 import { useJobsChannel } from "@/composables/useJobsChannel";
+import { useConfirm } from "@/composables/useConfirm";
 import {
   Play,
   Scissors,
@@ -17,6 +18,7 @@ import {
 } from "lucide-vue-next";
 
 const store = usePlansStore();
+const { confirm } = useConfirm();
 useJobsChannel();
 
 // Live elapsed time ticker
@@ -106,7 +108,15 @@ async function runVerify(planId: string) {
 }
 
 async function cancelRunning(planId: string, jobId: string) {
-  if (!confirm("Cancel the running job? This action cannot be undone.")) return;
+  if (
+    !(await confirm({
+      title: "Cancel Job",
+      message: "Cancel the running job? This action cannot be undone.",
+      confirmLabel: "Cancel Job",
+      variant: "warning",
+    }))
+  )
+    return;
   actionLoading.value = planId;
   actionMessage.value = null;
   try {

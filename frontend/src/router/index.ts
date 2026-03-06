@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
+import api from "@/lib/api";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -8,6 +9,12 @@ const router = createRouter({
       path: "/login",
       name: "login",
       component: () => import("@/views/LoginView.vue"),
+      meta: { public: true },
+    },
+    {
+      path: "/setup",
+      name: "setup",
+      component: () => import("@/views/SetupView.vue"),
       meta: { public: true },
     },
     {
@@ -46,9 +53,23 @@ const router = createRouter({
   ],
 });
 
-// Auth guard — validates the token on first navigation (page load / refresh),
-// then trusts the in-memory flag for subsequent in-app navigations.
+// One-time setup check on app boot
+let setupChecked = false;
+
 router.beforeEach(async (to) => {
+  // Check if first-time setup is needed (runs once per session)
+  if (!setupChecked) {
+    setupChecked = true;
+    try {
+      const { data } = await api.get("/system/health");
+      if (data.needs_setup && to.name !== "setup") {
+        return { name: "setup" };
+      }
+    } catch {
+      // Health endpoint unreachable — continue normally
+    }
+  }
+
   if (to.meta.public) return;
 
   const auth = useAuthStore();

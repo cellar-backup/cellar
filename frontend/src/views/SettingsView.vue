@@ -11,8 +11,10 @@ import {
   X,
 } from "lucide-vue-next";
 import { useSettingsStore, type Profile } from "@/stores/settings";
+import { useConfirm } from "@/composables/useConfirm";
 
 const store = useSettingsStore();
+const { confirm } = useConfirm();
 const loading = ref(true);
 const activeTab = ref<"retention" | "schedule">("retention");
 
@@ -240,7 +242,15 @@ async function saveProfile() {
 }
 
 async function deleteProfile(id: string, name: string) {
-  if (!confirm(`Delete profile "${name}"? This cannot be undone.`)) return;
+  if (
+    !(await confirm({
+      title: "Delete Profile",
+      message: `Delete profile \u201c${name}\u201d? This cannot be undone.`,
+      confirmLabel: "Delete",
+      variant: "danger",
+    }))
+  )
+    return;
   await store.deleteProfile(id);
 }
 

@@ -102,9 +102,6 @@ async function handleLogin() {
         </button>
       </form>
 
-      <p class="mt-4 text-center text-xs text-text-muted">
-        Default credentials: admin / admin
-      </p>
     </div>
   </div>
 </template>

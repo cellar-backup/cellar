@@ -2,6 +2,7 @@
 import { RouterView, useRoute } from "vue-router";
 import { computed } from "vue";
 import AppSidebar from "@/components/layout/AppSidebar.vue";
+import ConfirmModal from "@/components/ConfirmModal.vue";
 
 const route = useRoute();
 const isPublicPage = computed(() => route.meta.public === true);
@@ -18,4 +19,7 @@ const isPublicPage = computed(() => route.meta.public === true);
       <RouterView />
     </main>
   </div>
+
+  <!-- Global confirm modal -->
+  <ConfirmModal />
 </template>

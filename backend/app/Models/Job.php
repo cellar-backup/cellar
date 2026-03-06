@@ -59,6 +59,16 @@ class Job extends Model
         return $this->plan?->name ?? '';
     }
 
+    public function getSourceNameAttribute(): string
+    {
+        return $this->plan?->source?->display_label ?? '';
+    }
+
+    public function getSourceIdAttribute(): ?string
+    {
+        return $this->plan?->source_id;
+    }
+
     /**
      * Check if this job has been cancelled (e.g. by user from the UI).
      * Queue jobs should call this periodically and abort if true.

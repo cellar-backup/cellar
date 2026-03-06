@@ -37,6 +37,10 @@ class JobUpdated implements ShouldBroadcastNow
     /** Plan name for display — allows the frontend to build a full Job row from a single event. */
     public string $planName;
 
+    public string $sourceName;
+
+    public ?string $sourceId;
+
     public string $createdAt;
 
     public function __construct(Job $job)
@@ -50,6 +54,8 @@ class JobUpdated implements ShouldBroadcastNow
         $this->finishedAt = $job->finished_at?->toIso8601String();
         $this->errorMessage = $job->error_message;
         $this->planName = $job->plan_name ?? $job->plan?->name ?? '';
+        $this->sourceName = $job->source_name;
+        $this->sourceId = $job->source_id;
         $this->createdAt = $job->created_at?->toIso8601String() ?? now()->toIso8601String();
     }
 

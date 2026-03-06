@@ -1,18 +1,23 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, nextTick } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { usePlansStore, type Job } from "@/stores/plans";
+import { useSourcesStore } from "@/stores/sources";
 import { useJobsChannel } from "@/composables/useJobsChannel";
+import { useConfirm } from "@/composables/useConfirm";
+import { useRoute, useRouter } from "vue-router";
+import JobLogModal from "@/components/JobLogModal.vue";
 import {
   Clock,
   CircleCheck,
   CircleX,
   Loader2,
   FileText,
-  X,
   Ban,
 } from "lucide-vue-next";
 
 const store = usePlansStore();
+const sourcesStore = useSourcesStore();
+const { confirm } = useConfirm();
 useJobsChannel();
 
 // Live elapsed time ticker
@@ -20,102 +25,42 @@ const now = ref(Date.now());
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 
 // Log viewer state
-const showLog = ref(false);
-const logContent = ref<string | null>(null);
-const logLoading = ref(false);
 const logJobId = ref<string | null>(null);
 const logJobLabel = ref("");
-const logScrollArea = ref<HTMLElement | null>(null);
-let logPollTimer: ReturnType<typeof setInterval> | null = null;
 
-onMounted(() => {
-  store.fetchJobs();
+const route = useRoute();
+const router = useRouter();
+
+onMounted(async () => {
+  await Promise.all([store.fetchJobs(), sourcesStore.fetchSources()]);
   tickTimer = setInterval(() => {
     now.value = Date.now();
   }, 1000);
+
+  // Deep-link: open log viewer if ?log=<jobId> is present
+  const logParam = route.query.log as string | undefined;
+  if (logParam) {
+    const job = store.jobs.find((j: Job) => j.id === logParam);
+    if (job) {
+      openLog(job.id, resolveSourceName(job));
+    }
+    // Clean up the query param
+    router.replace({ path: route.path, query: {} });
+  }
 });
 
 onUnmounted(() => {
   if (tickTimer) clearInterval(tickTimer);
-  stopLogPolling();
 });
 
-function scrollLogToBottom() {
-  nextTick(() => {
-    if (logScrollArea.value) {
-      logScrollArea.value.scrollTop = logScrollArea.value.scrollHeight;
-    }
-  });
-}
-
-function stopLogPolling() {
-  if (logPollTimer) {
-    clearInterval(logPollTimer);
-    logPollTimer = null;
-  }
-}
-
-function isJobRunning(): boolean {
-  if (!logJobId.value) return false;
-  const job = store.jobs.find((j: Job) => j.id === logJobId.value);
-  return job?.status === "running" || job?.status === "pending";
-}
-
-async function fetchLogContent() {
-  if (!logJobId.value) return;
-  try {
-    const result = await store.fetchJobLog(logJobId.value);
-    if (result.content !== null) {
-      const wasAtBottom =
-        logScrollArea.value &&
-        logScrollArea.value.scrollHeight -
-          logScrollArea.value.scrollTop -
-          logScrollArea.value.clientHeight <
-          50;
-      logContent.value = result.content;
-      // Auto-scroll only if user was near the bottom
-      if (wasAtBottom || logLoading.value) {
-        scrollLogToBottom();
-      }
-    } else if (!logContent.value) {
-      logContent.value = null;
-    }
-  } catch {
-    if (!logContent.value) {
-      logContent.value = "Failed to load log.";
-    }
-  }
-}
-
-async function openLog(jobId: string, label: string) {
+function openLog(jobId: string, label: string) {
   logJobId.value = jobId;
   logJobLabel.value = label;
-  logContent.value = null;
-  logLoading.value = true;
-  showLog.value = true;
-  stopLogPolling();
-
-  await fetchLogContent();
-  logLoading.value = false;
-
-  // If the job is running, poll for live updates
-  if (isJobRunning()) {
-    logPollTimer = setInterval(async () => {
-      await fetchLogContent();
-      // Stop polling once the job finishes
-      if (!isJobRunning()) {
-        stopLogPolling();
-        await fetchLogContent(); // One final fetch
-      }
-    }, 2000);
-  }
 }
 
 function closeLog() {
-  showLog.value = false;
-  logContent.value = null;
   logJobId.value = null;
-  stopLogPolling();
+  logJobLabel.value = "";
 }
 
 function statusIcon(status: string) {
@@ -223,12 +168,26 @@ async function confirmCancel(jobId: string, jobType: string, status: string) {
   const action =
     status === "pending" ? "Cancel the queued" : "Cancel the running";
   if (
-    !confirm(
-      action + " " + typeLabel(jobType) + " job? This action cannot be undone.",
-    )
+    !(await confirm({
+      title: "Cancel Job",
+      message:
+        action +
+        " " +
+        typeLabel(jobType) +
+        " job? This action cannot be undone.",
+      confirmLabel: "Cancel Job",
+      variant: "warning",
+    }))
   )
     return;
   await store.cancelJob(jobId);
+}
+function resolveSourceName(job: Job): string {
+  if (job.source_id) {
+    const src = sourcesStore.sources.find((s) => s.id === job.source_id);
+    if (src) return src.display_label;
+  }
+  return job.source_name || job.plan_name || "—";
 }
 </script>
 
@@ -266,7 +225,7 @@ async function confirmCancel(jobId: string, jobType: string, status: string) {
           <tr class="border-b border-border text-left text-xs text-text-muted">
             <th class="px-5 py-3 font-medium">Status</th>
             <th class="px-5 py-3 font-medium">Type</th>
-            <th class="px-5 py-3 font-medium">Plan</th>
+            <th class="px-5 py-3 font-medium">Source</th>
             <th class="px-5 py-3 font-medium">Started</th>
             <th class="px-5 py-3 font-medium">Duration</th>
             <th class="px-5 py-3 font-medium">Progress</th>
@@ -276,7 +235,7 @@ async function confirmCancel(jobId: string, jobType: string, status: string) {
         </thead>
         <TransitionGroup name="table-row" tag="tbody">
           <tr
-            v-for="job in store.jobs"
+            v-for="job in store.sortedJobs"
             :key="job.id"
             class="border-b border-border last:border-none transition-all duration-300"
           >
@@ -300,7 +259,7 @@ async function confirmCancel(jobId: string, jobType: string, status: string) {
               {{ typeLabel(job.job_type) }}
             </td>
             <td class="px-5 py-3 text-text-muted">
-              {{ job.plan_name ?? "—" }}
+              {{ resolveSourceName(job) }}
             </td>
             <td class="px-5 py-3 text-text-muted">
               {{ fmtDate(job.started_at) }}
@@ -348,7 +307,7 @@ async function confirmCancel(jobId: string, jobType: string, status: string) {
                   @click="
                     openLog(
                       job.id,
-                      `${typeLabel(job.job_type)} — ${job.plan_name ?? 'Unknown'}`,
+                      `${typeLabel(job.job_type)} — ${resolveSourceName(job)}`,
                     )
                   "
                 >
@@ -370,62 +329,7 @@ async function confirmCancel(jobId: string, jobType: string, status: string) {
     </div>
 
     <!-- ======== Log Viewer Modal ======== -->
-    <Teleport to="body">
-      <div
-        v-if="showLog"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-        @click.self="closeLog"
-      >
-        <div
-          class="w-full max-w-3xl max-h-[80vh] flex flex-col rounded-2xl border border-border bg-surface shadow-xl"
-        >
-          <!-- Header -->
-          <div
-            class="flex items-center justify-between border-b border-border px-6 py-4"
-          >
-            <div class="flex items-center gap-3">
-              <FileText class="h-5 w-5 text-text-muted" />
-              <div>
-                <h2 class="text-sm font-semibold text-text-primary">Job Log</h2>
-                <p class="text-xs text-text-muted">{{ logJobLabel }}</p>
-              </div>
-            </div>
-            <button
-              class="rounded-lg p-1 text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors"
-              @click="closeLog"
-            >
-              <X class="h-5 w-5" />
-            </button>
-          </div>
-
-          <!-- Content -->
-          <div ref="logScrollArea" class="flex-1 overflow-auto p-6">
-            <div
-              v-if="logLoading"
-              class="flex items-center gap-2 text-text-muted"
-            >
-              <Loader2 class="h-4 w-4 animate-spin" />
-              Loading log…
-            </div>
-            <pre
-              v-else-if="logContent"
-              class="whitespace-pre-wrap break-words text-xs font-mono leading-relaxed text-text-primary bg-surface-raised rounded-lg p-4 max-h-[60vh] overflow-auto"
-              >{{ logContent }}</pre
-            >
-            <p v-else class="text-sm text-text-muted">
-              No log available for this job yet.
-            </p>
-            <div
-              v-if="isJobRunning() && !logLoading"
-              class="mt-3 flex items-center gap-2 text-xs text-info"
-            >
-              <Loader2 class="h-3.5 w-3.5 animate-spin" />
-              Live — updating every 2 seconds
-            </div>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <JobLogModal :job-id="logJobId" :label="logJobLabel" @close="closeLog" />
   </div>
 </template>
 

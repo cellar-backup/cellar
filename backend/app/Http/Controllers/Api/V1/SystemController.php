@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\AppSetting;
 use Illuminate\Http\JsonResponse;
 
 class SystemController extends Controller
@@ -12,6 +13,7 @@ class SystemController extends Controller
         return response()->json([
             'status' => 'healthy',
             'version' => config('app.version', '0.1.0'),
+            'needs_setup' => !AppSetting::get('setup_completed'),
             'checks' => [
                 'database' => $this->checkDatabase(),
                 'redis' => $this->checkRedis(),
