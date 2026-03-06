@@ -29,9 +29,12 @@ class RunPrune implements ShouldQueue
 
     public function handle(): void
     {
-        $plan = BackupPlan::with('repository')->findOrFail($this->planId);
+        $plan = BackupPlan::with(['repository', 'source'])->findOrFail($this->planId);
 
-        if (empty($plan->retention_policy)) {
+        // Retention lives on the source; fall back to plan for backward compat
+        $retentionPolicy = $plan->source?->retention_policy ?? $plan->retention_policy ?? [];
+
+        if (empty($retentionPolicy)) {
             return; // Nothing to prune
         }
 
@@ -48,7 +51,7 @@ class RunPrune implements ShouldQueue
         try {
             $log->section('Initializing prune');
             $log->line("Plan: {$plan->name}");
-            $log->line('Retention policy: '.json_encode($plan->retention_policy));
+            $log->line('Retention policy: '.json_encode($retentionPolicy));
             $log->line('Dry run: '.($this->dryRun ? 'yes' : 'no'));
 
             $engine = new BorgEngine(config('cellar.borg_path', '/usr/bin/borg'));
@@ -63,7 +66,7 @@ class RunPrune implements ShouldQueue
             }
 
             $log->section('Running borg prune');
-            $result = $engine->prune($repoPath, $plan->retention_policy, $this->dryRun);
+            $result = $engine->prune($repoPath, $retentionPolicy, $this->dryRun);
             $log->line($result->message);
 
             $job->update(['progress' => 60]);

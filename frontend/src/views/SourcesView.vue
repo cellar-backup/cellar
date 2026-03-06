@@ -25,6 +25,8 @@ import {
   Archive,
   FileText,
   Square,
+  CalendarClock,
+  Timer,
 } from "lucide-vue-next";
 import {
   useSourcesStore,
@@ -397,7 +399,7 @@ async function editDeleteSource() {
   closeEdit();
 }
 
-// == POLICIES MODAL ==
+// == SCHEDULE MODAL (was Policies) ==
 const showPolicies = ref(false);
 const policiesSourceId = ref<string | null>(null);
 const policiesSourceName = ref("");
@@ -409,9 +411,82 @@ const policyActionMsg = ref<{ id: string; text: string; ok: boolean } | null>(
 const editingPolicy = ref<string | null>(null);
 const policyForm = ref({
   schedule_cron: "",
-  retention_policy: {} as Record<string, number>,
 });
 const policySaving = ref(false);
+
+// Friendly schedule builder state
+const scheduleMode = ref<"simple" | "cron">("simple");
+const scheduleFrequency = ref<"daily" | "weekly" | "monthly">("daily");
+const scheduleTime = ref("02:00");
+const scheduleDays = ref<number[]>([]); // 0=Sun..6=Sat
+const scheduleMonthDay = ref(1);
+
+function buildCronFromSimple(): string {
+  const [h, m] = scheduleTime.value.split(":").map(Number);
+  if (scheduleFrequency.value === "daily") {
+    return `${m} ${h} * * *`;
+  }
+  if (scheduleFrequency.value === "weekly") {
+    const days =
+      scheduleDays.value.length > 0 ? scheduleDays.value.sort().join(",") : "1";
+    return `${m} ${h} * * ${days}`;
+  }
+  // monthly
+  return `${m} ${h} ${scheduleMonthDay.value} * *`;
+}
+
+function parseSimpleFromCron(cron: string) {
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) {
+    scheduleMode.value = "cron";
+    return;
+  }
+  const [min, hour, dom, , dow] = parts;
+  // Try to detect simple patterns
+  if (dom === "*" && dow === "*") {
+    scheduleMode.value = "simple";
+    scheduleFrequency.value = "daily";
+    scheduleTime.value = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
+    return;
+  }
+  if (dom === "*" && dow !== "*") {
+    scheduleMode.value = "simple";
+    scheduleFrequency.value = "weekly";
+    scheduleTime.value = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
+    scheduleDays.value = dow
+      .split(",")
+      .map(Number)
+      .filter((n) => !isNaN(n));
+    return;
+  }
+  if (dom !== "*" && dow === "*") {
+    scheduleMode.value = "simple";
+    scheduleFrequency.value = "monthly";
+    scheduleTime.value = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
+    scheduleMonthDay.value = parseInt(dom, 10) || 1;
+    return;
+  }
+  // Complex cron, fall back to advanced
+  scheduleMode.value = "cron";
+}
+
+function describeSchedule(cron: string): string {
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return cron;
+  const [min, hour, dom, , dow] = parts;
+  const time = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  if (dom === "*" && dow === "*") return `Daily at ${time}`;
+  if (dom === "*" && dow !== "*") {
+    const days = dow
+      .split(",")
+      .map((d) => dayNames[parseInt(d, 10)] ?? d)
+      .join(", ");
+    return `${days} at ${time}`;
+  }
+  if (dom !== "*" && dow === "*") return `Monthly on day ${dom} at ${time}`;
+  return cron;
+}
 
 async function openPolicies(sourceId: string, sourceName: string) {
   showPolicies.value = true;
@@ -455,23 +530,23 @@ function startEditPolicy(policy: Policy) {
   editingPolicy.value = policy.id;
   policyForm.value = {
     schedule_cron: policy.schedule_cron,
-    retention_policy: { ...policy.retention_policy },
   };
+  parseSimpleFromCron(policy.schedule_cron);
 }
 function cancelEditPolicy() {
   editingPolicy.value = null;
-}
-function applyRetentionPreset(preset: (typeof RETENTION_PRESETS)[number]) {
-  policyForm.value.retention_policy = { ...preset.policy };
 }
 
 async function savePolicy() {
   if (!editingPolicy.value) return;
   policySaving.value = true;
+  const cron =
+    scheduleMode.value === "simple"
+      ? buildCronFromSimple()
+      : policyForm.value.schedule_cron;
   try {
     await store.updatePolicy(editingPolicy.value, {
-      schedule_cron: policyForm.value.schedule_cron,
-      retention_policy: policyForm.value.retention_policy,
+      schedule_cron: cron,
     });
     editingPolicy.value = null;
     await refreshPolicies();
@@ -489,6 +564,52 @@ async function deletePolicy(policyId: string, name: string) {
   await store.deletePolicy(policyId);
   await refreshPolicies();
   await store.fetchSources();
+}
+
+// == RETENTION MODAL ==
+const showRetention = ref(false);
+const retentionSourceId = ref<string | null>(null);
+const retentionSourceName = ref("");
+const retentionForm = ref<Record<string, number>>({});
+const retentionSaving = ref(false);
+const retentionSuccess = ref(false);
+
+function openRetention(sourceId: string, sourceName: string) {
+  const source = store.sources.find((s) => s.id === sourceId);
+  showRetention.value = true;
+  retentionSourceId.value = sourceId;
+  retentionSourceName.value = sourceName;
+  retentionForm.value = {
+    ...(source?.retention_policy ?? {
+      keep_daily: 7,
+      keep_weekly: 4,
+      keep_monthly: 6,
+    }),
+  };
+  retentionSaving.value = false;
+  retentionSuccess.value = false;
+}
+function closeRetention() {
+  showRetention.value = false;
+  retentionSourceId.value = null;
+}
+function applyRetentionPreset(preset: (typeof RETENTION_PRESETS)[number]) {
+  retentionForm.value = { ...preset.policy };
+}
+async function saveRetention() {
+  if (!retentionSourceId.value) return;
+  retentionSaving.value = true;
+  retentionSuccess.value = false;
+  try {
+    await store.updateRetention(retentionSourceId.value, retentionForm.value);
+    retentionSuccess.value = true;
+    setTimeout(() => {
+      retentionSuccess.value = false;
+    }, 3000);
+  } catch {
+  } finally {
+    retentionSaving.value = false;
+  }
 }
 
 // == TIMELINE DRAWER ==
@@ -665,7 +786,9 @@ async function sourceAction(
     const data = await fn(target.id);
     sourceActionMsg.value = {
       id: sourceId,
-      text: data.detail ?? action.charAt(0).toUpperCase() + action.slice(1) + " job queued.",
+      text:
+        data.detail ??
+        action.charAt(0).toUpperCase() + action.slice(1) + " job queued.",
       ok: true,
     };
     setTimeout(() => {
@@ -872,7 +995,7 @@ async function cancelJob(jobId: string, jobType: string) {
                 >
                   <ClipboardList class="h-3 w-3" />
                   {{ source.policy_count }}
-                  {{ source.policy_count === 1 ? "policy" : "policies" }}
+                  {{ source.policy_count === 1 ? "schedule" : "schedules" }}
                 </span>
                 <span
                   v-if="source.archive_count"
@@ -946,10 +1069,17 @@ async function cancelJob(jobId: string, jobType: string) {
             </button>
             <button
               class="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs text-text-muted hover:bg-surface-raised hover:text-text-primary transition-colors"
-              title="Manage backup policies"
+              title="Manage backup schedules"
               @click.stop="openPolicies(source.id, source.display_label)"
             >
-              <ClipboardList class="h-3.5 w-3.5" /> Policies
+              <CalendarClock class="h-3.5 w-3.5" /> Schedule
+            </button>
+            <button
+              class="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs text-text-muted hover:bg-surface-raised hover:text-text-primary transition-colors"
+              title="Configure retention policy"
+              @click.stop="openRetention(source.id, source.display_label)"
+            >
+              <Timer class="h-3.5 w-3.5" /> Retention
             </button>
             <button
               class="rounded-lg p-1.5 text-text-muted hover:bg-surface-raised hover:text-text-primary transition-colors"
@@ -1068,9 +1198,7 @@ async function cancelJob(jobId: string, jobType: string) {
               <div
                 v-if="sourceActionMsg?.id === timelineSourceId"
                 class="ml-2 text-xs"
-                :class="
-                  sourceActionMsg.ok ? 'text-success' : 'text-danger'
-                "
+                :class="sourceActionMsg.ok ? 'text-success' : 'text-danger'"
               >
                 {{ sourceActionMsg.text }}
               </div>
@@ -1275,7 +1403,7 @@ async function cancelJob(jobId: string, jobType: string) {
       </Transition>
     </Teleport>
 
-    <!-- ===== POLICIES MODAL ===== -->
+    <!-- ===== SCHEDULE MODAL (was Policies) ===== -->
     <Teleport to="body">
       <div
         v-if="showPolicies"
@@ -1290,7 +1418,7 @@ async function cancelJob(jobId: string, jobType: string) {
           >
             <div>
               <h2 class="text-lg font-semibold text-text-primary">
-                Backup Policies
+                Backup Schedules
               </h2>
               <p class="text-sm text-text-muted">{{ policiesSourceName }}</p>
             </div>
@@ -1312,8 +1440,8 @@ async function cancelJob(jobId: string, jobType: string) {
               v-else-if="policies.length === 0"
               class="py-8 text-center text-text-muted"
             >
-              <ClipboardList class="mx-auto h-8 w-8" />
-              <p class="mt-2">No policies for this source.</p>
+              <CalendarClock class="mx-auto h-8 w-8" />
+              <p class="mt-2">No schedules for this source.</p>
             </div>
 
             <div
@@ -1327,15 +1455,11 @@ async function cancelJob(jobId: string, jobType: string) {
                     {{ pol.name }}
                   </h3>
                   <p class="text-xs text-text-muted mt-0.5">
-                    <span class="font-mono">{{ pol.schedule_cron }}</span>
+                    {{ describeSchedule(pol.schedule_cron) }}
+                    <span class="font-mono text-[10px] opacity-60 ml-1"
+                      >({{ pol.schedule_cron }})</span
+                    >
                     &middot; {{ pol.engine }}
-                  </p>
-                  <p
-                    class="text-[11px] text-text-muted mt-0.5"
-                    :title="fmtRetention(pol.retention_policy)"
-                  >
-                    Pruning keeps:
-                    {{ fmtRetention(pol.retention_policy) }}
                   </p>
                 </div>
                 <button
@@ -1385,7 +1509,9 @@ async function cancelJob(jobId: string, jobType: string) {
                     @click="
                       openLog(
                         pol.running_job?.id ?? '',
-                        (pol.running_job?.job_type ?? '') + ' — ' + pol.name,
+                        (pol.running_job?.job_type ?? '') +
+                          ' \u2014 ' +
+                          pol.name,
                         true,
                       )
                     "
@@ -1407,114 +1533,161 @@ async function cancelJob(jobId: string, jobType: string) {
                 </div>
               </div>
 
-              <!-- Editing policy -->
+              <!-- Editing schedule -->
               <div
                 v-if="editingPolicy === pol.id"
-                class="space-y-3 border-t border-border pt-3"
+                class="space-y-4 border-t border-border pt-3"
               >
-                <div>
+                <!-- Mode toggle -->
+                <div class="flex items-center gap-2">
+                  <button
+                    class="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                    :class="
+                      scheduleMode === 'simple'
+                        ? 'bg-primary text-white'
+                        : 'bg-surface-raised text-text-muted hover:text-text-primary'
+                    "
+                    @click="scheduleMode = 'simple'"
+                  >
+                    Simple
+                  </button>
+                  <button
+                    class="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                    :class="
+                      scheduleMode === 'cron'
+                        ? 'bg-primary text-white'
+                        : 'bg-surface-raised text-text-muted hover:text-text-primary'
+                    "
+                    @click="scheduleMode = 'cron'"
+                  >
+                    Advanced (CRON)
+                  </button>
+                </div>
+
+                <!-- Simple mode -->
+                <div v-if="scheduleMode === 'simple'" class="space-y-3">
+                  <!-- Frequency -->
+                  <div>
+                    <label
+                      class="mb-1.5 block text-xs font-medium text-text-muted"
+                      >Repeat</label
+                    >
+                    <div class="flex gap-2">
+                      <button
+                        v-for="freq in ['daily', 'weekly', 'monthly'] as const"
+                        :key="freq"
+                        class="rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors capitalize"
+                        :class="
+                          scheduleFrequency === freq
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border text-text-muted hover:bg-surface-raised'
+                        "
+                        @click="scheduleFrequency = freq"
+                      >
+                        {{ freq }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Day of week (weekly) -->
+                  <div v-if="scheduleFrequency === 'weekly'">
+                    <label
+                      class="mb-1.5 block text-xs font-medium text-text-muted"
+                      >On days</label
+                    >
+                    <div class="flex gap-1">
+                      <button
+                        v-for="(day, idx) in [
+                          'S',
+                          'M',
+                          'T',
+                          'W',
+                          'T',
+                          'F',
+                          'S',
+                        ]"
+                        :key="idx"
+                        class="h-8 w-8 rounded-full text-xs font-medium transition-colors"
+                        :class="
+                          scheduleDays.includes(idx)
+                            ? 'bg-primary text-white'
+                            : 'bg-surface-raised text-text-muted hover:bg-surface-raised hover:text-text-primary'
+                        "
+                        @click="
+                          scheduleDays.includes(idx)
+                            ? scheduleDays.splice(scheduleDays.indexOf(idx), 1)
+                            : scheduleDays.push(idx)
+                        "
+                      >
+                        {{ day }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Day of month (monthly) -->
+                  <div v-if="scheduleFrequency === 'monthly'">
+                    <label
+                      class="mb-1.5 block text-xs font-medium text-text-muted"
+                      >On day</label
+                    >
+                    <select
+                      v-model.number="scheduleMonthDay"
+                      class="rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none"
+                    >
+                      <option v-for="d in 28" :key="d" :value="d">
+                        {{ d }}
+                      </option>
+                    </select>
+                  </div>
+
+                  <!-- Time picker -->
+                  <div>
+                    <label
+                      class="mb-1.5 block text-xs font-medium text-text-muted"
+                      >At time</label
+                    >
+                    <input
+                      v-model="scheduleTime"
+                      type="time"
+                      class="rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+
+                  <!-- Preview -->
+                  <div
+                    class="rounded-lg bg-info/5 border border-info/10 px-3 py-2 text-[11px] text-info leading-relaxed"
+                  >
+                    <strong>Schedule:</strong>
+                    {{ describeSchedule(buildCronFromSimple()) }}
+                    <span class="font-mono ml-1 opacity-60"
+                      >({{ buildCronFromSimple() }})</span
+                    >
+                  </div>
+                </div>
+
+                <!-- Advanced CRON mode -->
+                <div v-if="scheduleMode === 'cron'">
                   <label class="mb-1 block text-xs font-medium text-text-muted"
-                    >Cron Schedule</label
+                    >Cron Expression</label
                   >
                   <input
                     v-model="policyForm.schedule_cron"
                     type="text"
+                    placeholder="0 2 * * *"
                     class="w-full rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-sm text-text-primary font-mono focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   />
-                </div>
-                <div>
-                  <label
-                    class="mb-1 block text-xs font-medium text-text-muted"
-                    >Retention Policy</label
-                  >
-                  <p class="mb-2 text-[11px] text-text-muted leading-relaxed">
-                    When pruning runs, Cellar keeps the <strong>best backup</strong>
-                    from each time window below and deletes the rest.
-                    For example, &ldquo;7 days&rdquo; means keep 1 backup per day
-                    for the last 7 days (7 snapshots from that tier).
+                  <p class="mt-1 text-[10px] text-text-muted">
+                    Format: minute hour day-of-month month day-of-week
                   </p>
-                  <div class="flex flex-wrap gap-1.5 mb-3">
-                    <button
-                      v-for="preset in RETENTION_PRESETS"
-                      :key="preset.label"
-                      class="rounded-lg border border-border px-2.5 py-1.5 text-left hover:bg-surface-raised hover:border-primary/30 transition-colors group/preset"
-                      :title="preset.detail"
-                      @click="applyRetentionPreset(preset)"
-                    >
-                      <span class="block text-xs font-medium text-text-primary group-hover/preset:text-primary">
-                        {{ preset.label }}
-                      </span>
-                      <span class="block text-[10px] text-text-muted">
-                        {{ preset.desc }}
-                      </span>
-                    </button>
-                  </div>
-                  <div class="space-y-2">
-                    <div class="flex items-center gap-2">
-                      <span class="text-[11px] text-text-muted w-[140px] shrink-0"
-                        >Keep 1 per day for</span
-                      >
-                      <input
-                        v-model.number="policyForm.retention_policy.keep_daily"
-                        type="number"
-                        min="0"
-                        class="w-16 rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary text-center focus:border-primary focus:outline-none"
-                      />
-                      <span class="text-[11px] text-text-muted">days</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span class="text-[11px] text-text-muted w-[140px] shrink-0"
-                        >Keep 1 per week for</span
-                      >
-                      <input
-                        v-model.number="policyForm.retention_policy.keep_weekly"
-                        type="number"
-                        min="0"
-                        class="w-16 rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary text-center focus:border-primary focus:outline-none"
-                      />
-                      <span class="text-[11px] text-text-muted">weeks</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span class="text-[11px] text-text-muted w-[140px] shrink-0"
-                        >Keep 1 per month for</span
-                      >
-                      <input
-                        v-model.number="
-                          policyForm.retention_policy.keep_monthly
-                        "
-                        type="number"
-                        min="0"
-                        class="w-16 rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary text-center focus:border-primary focus:outline-none"
-                      />
-                      <span class="text-[11px] text-text-muted">months</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span class="text-[11px] text-text-muted w-[140px] shrink-0"
-                        >Keep 1 per year for</span
-                      >
-                      <input
-                        v-model.number="policyForm.retention_policy.keep_yearly"
-                        type="number"
-                        min="0"
-                        class="w-16 rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary text-center focus:border-primary focus:outline-none"
-                      />
-                      <span class="text-[11px] text-text-muted">years</span>
-                    </div>
-                  </div>
                   <div
-                    v-if="
-                      policyForm.retention_policy.keep_daily ||
-                      policyForm.retention_policy.keep_weekly ||
-                      policyForm.retention_policy.keep_monthly ||
-                      policyForm.retention_policy.keep_yearly
-                    "
+                    v-if="policyForm.schedule_cron"
                     class="mt-2 rounded-lg bg-info/5 border border-info/10 px-3 py-2 text-[11px] text-info leading-relaxed"
                   >
-                    <strong>Summary:</strong>
-                    {{ fmtRetention(policyForm.retention_policy) }}.
-                    Older backups outside these windows are automatically deleted when pruning runs.
+                    <strong>Preview:</strong>
+                    {{ describeSchedule(policyForm.schedule_cron) }}
                   </div>
                 </div>
+
                 <div class="flex items-center gap-2">
                   <button
                     :disabled="policySaving"
@@ -1544,7 +1717,7 @@ async function cancelJob(jobId: string, jobType: string) {
                 <div class="ml-auto flex items-center gap-1">
                   <button
                     class="rounded p-1 text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors"
-                    title="Edit"
+                    title="Edit schedule"
                     @click="startEditPolicy(pol)"
                   >
                     <Pencil class="h-3.5 w-3.5" />
@@ -1565,6 +1738,155 @@ async function cancelJob(jobId: string, jobType: string) {
               >
                 {{ policyActionMsg.text }}
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ===== RETENTION MODAL ===== -->
+    <Teleport to="body">
+      <div
+        v-if="showRetention"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        @click.self="closeRetention"
+      >
+        <div
+          class="w-full max-w-lg rounded-2xl border border-border bg-surface shadow-xl"
+        >
+          <div
+            class="flex items-center justify-between border-b border-border px-6 py-4"
+          >
+            <div>
+              <h2 class="text-lg font-semibold text-text-primary">
+                Retention Policy
+              </h2>
+              <p class="text-sm text-text-muted">{{ retentionSourceName }}</p>
+            </div>
+            <button
+              class="rounded-lg p-2 text-text-muted hover:bg-surface-raised hover:text-text-primary transition-colors"
+              @click="closeRetention"
+            >
+              <X class="h-5 w-5" />
+            </button>
+          </div>
+          <div class="px-6 py-4 space-y-4">
+            <p class="text-[11px] text-text-muted leading-relaxed">
+              When pruning runs, Cellar keeps the <strong>best backup</strong>
+              from each time window below and deletes the rest. For example,
+              &ldquo;7 days&rdquo; means keep 1 backup per day for the last 7
+              days (7 snapshots from that tier).
+            </p>
+            <!-- Presets -->
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="preset in RETENTION_PRESETS"
+                :key="preset.label"
+                class="rounded-lg border border-border px-2.5 py-1.5 text-left hover:bg-surface-raised hover:border-primary/30 transition-colors group/preset"
+                :title="preset.detail"
+                @click="applyRetentionPreset(preset)"
+              >
+                <span
+                  class="block text-xs font-medium text-text-primary group-hover/preset:text-primary"
+                >
+                  {{ preset.label }}
+                </span>
+                <span class="block text-[10px] text-text-muted">
+                  {{ preset.desc }}
+                </span>
+              </button>
+            </div>
+            <!-- Fields -->
+            <div class="space-y-2">
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] text-text-muted w-[140px] shrink-0"
+                  >Keep 1 per day for</span
+                >
+                <input
+                  v-model.number="retentionForm.keep_daily"
+                  type="number"
+                  min="0"
+                  class="w-16 rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary text-center focus:border-primary focus:outline-none"
+                />
+                <span class="text-[11px] text-text-muted">days</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] text-text-muted w-[140px] shrink-0"
+                  >Keep 1 per week for</span
+                >
+                <input
+                  v-model.number="retentionForm.keep_weekly"
+                  type="number"
+                  min="0"
+                  class="w-16 rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary text-center focus:border-primary focus:outline-none"
+                />
+                <span class="text-[11px] text-text-muted">weeks</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] text-text-muted w-[140px] shrink-0"
+                  >Keep 1 per month for</span
+                >
+                <input
+                  v-model.number="retentionForm.keep_monthly"
+                  type="number"
+                  min="0"
+                  class="w-16 rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary text-center focus:border-primary focus:outline-none"
+                />
+                <span class="text-[11px] text-text-muted">months</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] text-text-muted w-[140px] shrink-0"
+                  >Keep 1 per year for</span
+                >
+                <input
+                  v-model.number="retentionForm.keep_yearly"
+                  type="number"
+                  min="0"
+                  class="w-16 rounded border border-border bg-surface-raised px-2 py-1 text-xs text-text-primary text-center focus:border-primary focus:outline-none"
+                />
+                <span class="text-[11px] text-text-muted">years</span>
+              </div>
+            </div>
+            <!-- Summary -->
+            <div
+              v-if="
+                retentionForm.keep_daily ||
+                retentionForm.keep_weekly ||
+                retentionForm.keep_monthly ||
+                retentionForm.keep_yearly
+              "
+              class="rounded-lg bg-info/5 border border-info/10 px-3 py-2 text-[11px] text-info leading-relaxed"
+            >
+              <strong>Summary:</strong>
+              {{ fmtRetention(retentionForm) }}. Older backups outside these
+              windows are automatically deleted when pruning runs.
+            </div>
+            <!-- Actions -->
+            <div class="flex items-center gap-2 pt-1">
+              <button
+                :disabled="retentionSaving"
+                class="rounded-lg bg-primary px-4 py-1.5 text-xs font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
+                @click="saveRetention"
+              >
+                <Loader2
+                  v-if="retentionSaving"
+                  class="inline h-3 w-3 animate-spin mr-1"
+                />
+                Save
+              </button>
+              <button
+                class="text-xs text-text-muted hover:text-text-primary transition-colors"
+                @click="closeRetention"
+              >
+                Cancel
+              </button>
+              <span
+                v-if="retentionSuccess"
+                class="text-xs text-success ml-auto"
+              >
+                <CircleCheck class="inline h-3.5 w-3.5 mr-0.5" />
+                Saved
+              </span>
             </div>
           </div>
         </div>
@@ -2031,9 +2353,7 @@ async function cancelJob(jobId: string, jobType: string) {
             <div class="flex items-center gap-3">
               <FileText class="h-5 w-5 text-text-muted" />
               <div>
-                <h2 class="text-sm font-semibold text-text-primary">
-                  Job Log
-                </h2>
+                <h2 class="text-sm font-semibold text-text-primary">Job Log</h2>
                 <p class="text-xs text-text-muted">{{ logJobLabel }}</p>
               </div>
             </div>

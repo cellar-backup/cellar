@@ -30,6 +30,7 @@ class SourceController extends Controller
                 $data['policy_count'] = $s->backup_plans_count;
                 $data['archive_count'] = $archiveCount;
                 $data['last_archive_at'] = $lastArchive;
+                $data['retention_policy'] = $s->retention_policy;
 
                 return $data;
             });
@@ -50,6 +51,7 @@ class SourceController extends Controller
             'path' => 'nullable|string|max:1000',
             'notes' => 'nullable|string',
             'extra_config' => 'nullable|array',
+            'retention_policy' => 'nullable|array',
         ]);
 
         $source = Source::create($data);
@@ -78,6 +80,7 @@ class SourceController extends Controller
             'path' => 'nullable|string|max:1000',
             'notes' => 'nullable|string',
             'extra_config' => 'nullable|array',
+            'retention_policy' => 'nullable|array',
         ]);
 
         $source->update($data);
@@ -212,6 +215,22 @@ class SourceController extends Controller
                 ? 'Connection successful.'
                 : 'Connection failed: '.$result->errorOutput(),
         ], $ok ? 200 : 422);
+    }
+
+    // ── Retention ─────────────────────────────────────────────
+
+    public function updateRetention(Request $request, Source $source): JsonResponse
+    {
+        $data = $request->validate([
+            'retention_policy' => 'required|array',
+        ]);
+
+        $source->update(['retention_policy' => $data['retention_policy']]);
+
+        return response()->json([
+            'retention_policy' => $source->retention_policy,
+            'message' => 'Retention policy updated.',
+        ]);
     }
 
     // ── Toggle enabled ─────────────────────────────────────────

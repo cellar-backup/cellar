@@ -106,10 +106,7 @@ async function runVerify(planId: string) {
 }
 
 async function cancelRunning(planId: string, jobId: string) {
-  if (
-    !confirm("Cancel the running job? This action cannot be undone.")
-  )
-    return;
+  if (!confirm("Cancel the running job? This action cannot be undone.")) return;
   actionLoading.value = planId;
   actionMessage.value = null;
   try {
@@ -191,9 +188,7 @@ async function openLog(jobId: string, label: string, isRunning: boolean) {
   if (isRunning) {
     logPollTimer = setInterval(async () => {
       await fetchLogContent();
-      const plan = store.plans.find(
-        (p) => p.running_job?.id === jobId,
-      );
+      const plan = store.plans.find((p) => p.running_job?.id === jobId);
       if (!plan) {
         logJobRunning.value = false;
         stopLogPolling();
@@ -644,9 +639,7 @@ function closeImport() {
             <div class="flex items-center gap-3">
               <FileText class="h-5 w-5 text-text-muted" />
               <div>
-                <h2 class="text-sm font-semibold text-text-primary">
-                  Job Log
-                </h2>
+                <h2 class="text-sm font-semibold text-text-primary">Job Log</h2>
                 <p class="text-xs text-text-muted">{{ logJobLabel }}</p>
               </div>
             </div>

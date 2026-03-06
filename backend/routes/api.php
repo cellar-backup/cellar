@@ -7,7 +7,9 @@ use App\Http\Controllers\Api\V1\DocumentController;
 use App\Http\Controllers\Api\V1\JobController;
 use App\Http\Controllers\Api\V1\KubernetesController;
 use App\Http\Controllers\Api\V1\NotificationChannelController;
+use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\RepositoryController;
+use App\Http\Controllers\Api\V1\SettingsController;
 use App\Http\Controllers\Api\V1\SourceController;
 use App\Http\Controllers\Api\V1\SystemController;
 use Illuminate\Support\Facades\Route;
@@ -47,6 +49,7 @@ Route::prefix('v1')->group(function () {
         Route::post('sources/quick-add', [SourceController::class, 'quickAdd']);
         Route::post('sources/{source}/test-connection', [SourceController::class, 'testConnection']);
         Route::patch('sources/{source}/toggle', [SourceController::class, 'toggle']);
+        Route::patch('sources/{source}/retention', [SourceController::class, 'updateRetention']);
         Route::get('sources/{source}/policies', [SourceController::class, 'policies']);
         Route::get('sources/{source}/archives', [SourceController::class, 'archives']);
 
@@ -79,6 +82,13 @@ Route::prefix('v1')->group(function () {
         // Documents
         Route::apiResource('documents', DocumentController::class);
         Route::post('documents/{document}/test', [DocumentController::class, 'test']);
+
+        // Profiles (reusable schedule & retention presets)
+        Route::apiResource('profiles', ProfileController::class);
+
+        // App Settings
+        Route::get('settings', [SettingsController::class, 'index']);
+        Route::put('settings', [SettingsController::class, 'update']);
 
         // Kubernetes Radar
         Route::prefix('kubernetes')->group(function () {

@@ -18,6 +18,7 @@ export interface Source {
   policy_count: number;
   archive_count: number;
   last_archive_at: string | null;
+  retention_policy: Record<string, number> | null;
   created_at: string;
   updated_at: string;
 }
@@ -275,6 +276,19 @@ export const useSourcesStore = defineStore("sources", () => {
     });
   }
 
+  async function updateRetention(
+    sourceId: string,
+    retentionPolicy: Record<string, number>,
+  ): Promise<void> {
+    const { data } = await api.patch(`/sources/${sourceId}/retention`, {
+      retention_policy: retentionPolicy,
+    });
+    const source = sources.value.find((s) => s.id === sourceId);
+    if (source) {
+      source.retention_policy = data.retention_policy;
+    }
+  }
+
   return {
     sources,
     loading,
@@ -299,5 +313,6 @@ export const useSourcesStore = defineStore("sources", () => {
     restoreArchive,
     downloadArchive,
     toggleKeepForever,
+    updateRetention,
   };
 });

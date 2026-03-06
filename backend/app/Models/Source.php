@@ -23,6 +23,7 @@ class Source extends Model
         'enabled',
         'notes',
         'extra_config',
+        'retention_policy',
     ];
 
     protected $hidden = ['password'];
@@ -35,6 +36,7 @@ class Source extends Model
             'password' => 'encrypted',
             'enabled' => 'boolean',
             'extra_config' => 'array',
+            'retention_policy' => 'array',
         ];
     }
 
@@ -51,6 +53,15 @@ class Source extends Model
             // Auto-generate name
             if (empty($source->name)) {
                 $source->name = $source->generateName();
+            }
+
+            // Auto-fill default retention policy
+            if (empty($source->retention_policy)) {
+                $source->retention_policy = [
+                    'keep_daily' => 7,
+                    'keep_weekly' => 4,
+                    'keep_monthly' => 6,
+                ];
             }
         });
     }

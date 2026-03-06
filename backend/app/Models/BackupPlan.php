@@ -44,15 +44,7 @@ class BackupPlan extends Model
 
     protected static function booted(): void
     {
-        static::saving(function (BackupPlan $plan) {
-            if (empty($plan->retention_policy)) {
-                $plan->retention_policy = [
-                    'keep_daily' => 7,
-                    'keep_weekly' => 4,
-                    'keep_monthly' => 6,
-                ];
-            }
-        });
+        // Retention now lives on the Source model — no default needed here.
     }
 
     // ── Relationships ──────────────────────────────────────────
