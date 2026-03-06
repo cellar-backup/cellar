@@ -194,16 +194,22 @@ class SourceController extends Controller
 
         $host = $source->host ?: 'localhost';
         $port = $source->port ?: $source->source_type->defaultPort() ?? 5432;
+        $user = $source->username ?: ($source->source_type->value === 'postgresql' ? 'postgres' : 'root');
 
         $result = match ($source->source_type->value) {
-            'postgresql' => Process::timeout(10)->run([
-                'pg_isready', '-h', $host, '-p', (string) $port,
-            ]),
+            'postgresql' => Process::timeout(10)
+                ->env(['PGPASSWORD' => $source->password ?? ''])
+                ->run([
+                    'psql', '-h', $host, '-p', (string) $port,
+                    '-U', $user, '--no-password',
+                    '-c', 'SELECT 1',
+                    $source->database_name ?: 'postgres',
+                ]),
             'mysql', 'mariadb' => Process::timeout(10)->run([
                 'mysqladmin', 'ping',
                 '-h', $host,
                 '-P', (string) $port,
-                '-u', $source->username ?: 'root',
+                '-u', $user,
                 ...($source->password ? ['--password='.$source->password] : []),
             ]),
             default => null,

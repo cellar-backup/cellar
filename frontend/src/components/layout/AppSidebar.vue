@@ -175,11 +175,15 @@ function elapsed(job: Job) {
       class="border-t border-border px-2 py-2"
     >
       <div class="flex items-center justify-between px-2 mb-1.5">
-        <span class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Recent Jobs</span>
+        <span
+          class="text-[10px] font-semibold uppercase tracking-wider text-text-muted"
+          >Recent Jobs</span
+        >
         <RouterLink
           to="/jobs"
           class="text-[10px] text-primary hover:text-primary/80 transition-colors"
-        >View all</RouterLink>
+          >View all</RouterLink
+        >
       </div>
       <div class="space-y-0.5">
         <RouterLink
@@ -200,27 +204,41 @@ function elapsed(job: Job) {
           <!-- Info -->
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1">
-              <span class="truncate text-[11px] font-medium text-text-primary leading-tight">
-                {{ job.plan_name || 'Job' }}
+              <span
+                class="truncate text-[11px] font-medium text-text-primary leading-tight"
+              >
+                {{ job.plan_name || "Job" }}
               </span>
-              <span class="shrink-0 text-[10px] text-text-muted">{{ jobTypeLabel(job.job_type) }}</span>
+              <span class="shrink-0 text-[10px] text-text-muted">{{
+                jobTypeLabel(job.job_type)
+              }}</span>
             </div>
             <!-- Progress bar for running jobs -->
-            <div v-if="job.status === 'running'" class="mt-0.5 flex items-center gap-1.5">
-              <div class="h-1 flex-1 rounded-full bg-surface-raised overflow-hidden">
+            <div
+              v-if="job.status === 'running'"
+              class="mt-0.5 flex items-center gap-1.5"
+            >
+              <div
+                class="h-1 flex-1 rounded-full bg-surface-raised overflow-hidden"
+              >
                 <div
                   class="h-full rounded-full bg-info transition-all duration-300"
                   :style="{ width: `${job.progress}%` }"
                 />
               </div>
-              <span class="text-[9px] tabular-nums text-info font-medium">{{ job.progress }}%</span>
+              <span class="text-[9px] tabular-nums text-info font-medium"
+                >{{ job.progress }}%</span
+              >
             </div>
             <!-- Time for completed/failed -->
             <div v-else class="mt-0.5 flex items-center gap-1.5">
               <span class="text-[10px] text-text-muted">
                 {{ timeAgo(job.finished_at || job.started_at) }}
               </span>
-              <span v-if="job.started_at" class="text-[10px] text-text-muted opacity-60">
+              <span
+                v-if="job.started_at"
+                class="text-[10px] text-text-muted opacity-60"
+              >
                 {{ elapsed(job) }}
               </span>
             </div>
