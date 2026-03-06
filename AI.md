@@ -677,21 +677,27 @@ Lists available databases on discovered endpoints using a **dual strategy**. Use
 
 ## 14. Database Migrations
 
-12 migration files:
+**Naming convention:** Migration filenames MUST use the actual creation date as the timestamp prefix: `YYYY_MM_DD_NNNNNN_description.php`, where `NNNNNN` is a zero-padded sequence number for ordering within the same day (e.g., `000001`, `000002`). Never use placeholder dates like `2024_01_01` or future dates. The first 4 migrations (`0001_01_01_*`) are Laravel framework defaults and follow Laravel's own convention.
+
+17 migration files:
 
 1. `0001_01_01_000000_create_users_table.php` — users, password_reset_tokens, sessions
 2. `0001_01_01_000001_create_cache_table.php` — cache, cache_locks
 3. `0001_01_01_000002_create_jobs_table.php` — Laravel queue jobs, job_batches, failed_jobs
 4. `0001_01_01_000003_create_personal_access_tokens_table.php` — Sanctum tokens
-5. `2024_01_01_000010_create_repositories_table.php`
-6. `2024_01_01_000011_create_sources_table.php`
-7. `2024_01_01_000012_create_backup_plans_table.php`
-8. `2024_01_01_000013_create_backup_jobs_table.php`
-9. `2024_01_01_000014_create_archives_table.php`
-10. `2024_01_01_000015_create_notification_channels_table.php`
-11. `2024_01_01_000016_create_custom_documents_table.php`
-12. `2024_01_01_000017_create_radar_ignores_table.php` — K8s Radar ignore list (resource_key unique, namespace, name, kind, source_type, reason)
-13. `2024_01_01_000018_create_radar_clusters_table.php` — K8s cluster configs (name, kubeconfig encrypted, context, default_namespace, is_active, last_scanned_at) + adds cluster_id FK to radar_ignores
+5. `2026_03_03_000001_create_repositories_table.php`
+6. `2026_03_03_000002_create_sources_table.php`
+7. `2026_03_03_000003_create_backup_plans_table.php`
+8. `2026_03_03_000004_create_backup_jobs_table.php`
+9. `2026_03_03_000005_create_archives_table.php`
+10. `2026_03_03_000006_create_notification_channels_table.php`
+11. `2026_03_03_000007_create_custom_documents_table.php`
+12. `2026_03_04_000001_create_radar_ignores_table.php` — K8s Radar ignore list (resource_key unique, namespace, name, kind, source_type, reason)
+13. `2026_03_04_000002_create_radar_clusters_table.php` — K8s cluster configs (name, kubeconfig encrypted, context, default_namespace, is_active, last_scanned_at) + adds cluster_id FK to radar_ignores
+14. `2026_03_05_000001_add_progress_to_backup_jobs_table.php` — progress tracking column
+15. `2026_03_05_000002_add_tags_and_notes_to_archives.php` — tags/notes on archives
+16. `2026_03_05_000003_add_retention_policy_to_sources_table.php` — per-source retention
+17. `2026_03_05_000004_create_profiles_and_settings_tables.php` — reusable profiles + app settings
 
 ---
 
