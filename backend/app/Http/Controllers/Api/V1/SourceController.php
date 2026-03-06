@@ -79,9 +79,18 @@ class SourceController extends Controller
             'database_name' => 'nullable|string|max:255',
             'path' => 'nullable|string|max:1000',
             'notes' => 'nullable|string',
+            'enabled' => 'nullable|boolean',
             'extra_config' => 'nullable|array',
             'retention_policy' => 'nullable|array',
         ]);
+
+        // Laravel's ConvertEmptyStringsToNull middleware turns '' into null,
+        // but these columns are NOT NULL with default '' in SQLite.
+        foreach (['name', 'host', 'username', 'password', 'database_name', 'path', 'notes'] as $field) {
+            if (array_key_exists($field, $data) && is_null($data[$field])) {
+                $data[$field] = '';
+            }
+        }
 
         $source->update($data);
 

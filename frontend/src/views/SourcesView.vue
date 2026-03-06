@@ -614,19 +614,27 @@ async function saveRetention() {
 }
 
 // == DUMP METHOD (K8s sources) ==
-function getSourceDumpMethod(source: { extra_config: Record<string, unknown> | null }): string | null {
-  const k8s = source.extra_config?.kubernetes as Record<string, unknown> | undefined;
+function getSourceDumpMethod(source: {
+  extra_config: Record<string, unknown> | null;
+}): string | null {
+  const k8s = source.extra_config?.kubernetes as
+    | Record<string, unknown>
+    | undefined;
   return (k8s?.dump_method as string) ?? null;
 }
-function isK8sSource(source: { extra_config: Record<string, unknown> | null }): boolean {
-  const k8s = source.extra_config?.kubernetes as Record<string, unknown> | undefined;
+function isK8sSource(source: {
+  extra_config: Record<string, unknown> | null;
+}): boolean {
+  const k8s = source.extra_config?.kubernetes as
+    | Record<string, unknown>
+    | undefined;
   return !!k8s?.cluster_id;
 }
 async function toggleDumpMethod(sourceId: string) {
   const source = store.sources.find((s) => s.id === sourceId);
   if (!source) return;
   const current = getSourceDumpMethod(source);
-  const next = current === 'direct' ? 'kubectl' : 'direct';
+  const next = current === "direct" ? "kubectl" : "direct";
   await store.updateDumpMethod(sourceId, next);
 }
 
@@ -1102,16 +1110,22 @@ async function cancelJob(jobId: string, jobType: string) {
             <button
               v-if="isK8sSource(source)"
               class="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors"
-              :class="getSourceDumpMethod(source) === 'direct'
-                ? 'border-success/30 bg-success/5 text-success hover:bg-success/10'
-                : 'border-info/30 bg-info/5 text-info hover:bg-info/10'"
-              :title="getSourceDumpMethod(source) === 'direct'
-                ? 'Using direct network dump (click to switch to kubectl)'
-                : 'Using kubectl exec dump (click to switch to direct)'"
+              :class="
+                getSourceDumpMethod(source) === 'direct'
+                  ? 'border-success/30 bg-success/5 text-success hover:bg-success/10'
+                  : 'border-info/30 bg-info/5 text-info hover:bg-info/10'
+              "
+              :title="
+                getSourceDumpMethod(source) === 'direct'
+                  ? 'Using direct network dump (click to switch to kubectl)'
+                  : 'Using kubectl exec dump (click to switch to direct)'
+              "
               @click.stop="toggleDumpMethod(source.id)"
             >
               <Server class="h-3.5 w-3.5" />
-              {{ getSourceDumpMethod(source) === 'direct' ? 'Direct' : 'kubectl' }}
+              {{
+                getSourceDumpMethod(source) === "direct" ? "Direct" : "kubectl"
+              }}
             </button>
             <button
               class="rounded-lg p-1.5 text-text-muted hover:bg-surface-raised hover:text-text-primary transition-colors"

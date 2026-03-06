@@ -58,7 +58,7 @@ export interface ImportOverride {
   username?: string;
   password?: string;
   database_name?: string;
-  dump_method?: 'direct' | 'kubectl';
+  dump_method?: "direct" | "kubectl";
 }
 
 export interface RadarIgnoreEntry {
