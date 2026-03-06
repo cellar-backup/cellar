@@ -27,6 +27,10 @@ frontend/dist/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
 
+# ----- Compiled TS/Vue duplicates -----
+frontend/src/**/*.js
+frontend/src/**/*.vue.js
+
 # ----- Docker -----
 docker-compose.override.yml
 
