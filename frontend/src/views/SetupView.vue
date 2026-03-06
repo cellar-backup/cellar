@@ -186,7 +186,11 @@ onMounted(async () => {
     <div class="w-full max-w-lg">
       <!-- Step indicator -->
       <div class="mb-8 flex items-center justify-center gap-2">
-        <template v-for="(step, i) in steps" :key="i">
+        <div
+          v-for="(_step, i) in steps"
+          :key="i"
+          class="flex items-center gap-2"
+        >
           <div
             class="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium transition-all duration-300"
             :class="
@@ -205,7 +209,7 @@ onMounted(async () => {
             class="h-px w-8 transition-colors duration-300"
             :class="i < currentStep ? 'bg-primary' : 'bg-border'"
           />
-        </template>
+        </div>
       </div>
 
       <!-- Step content -->
