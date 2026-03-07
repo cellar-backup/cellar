@@ -38,6 +38,21 @@ else
     grep "^APP_KEY=" /app/.env | cut -d= -f2- > "$KEY_FILE"
 fi
 
+# ── Reverb key persistence ───────────────────────
+REVERB_KEY_FILE="/app/data/.reverb_key"
+REVERB_SECRET_FILE="/app/data/.reverb_secret"
+if [ -f "$REVERB_KEY_FILE" ] && [ -f "$REVERB_SECRET_FILE" ]; then
+    REVERB_KEY=$(cat "$REVERB_KEY_FILE")
+    REVERB_SECRET=$(cat "$REVERB_SECRET_FILE")
+else
+    REVERB_KEY=$(head -c 20 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 20)
+    REVERB_SECRET=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
+    echo -n "$REVERB_KEY" > "$REVERB_KEY_FILE"
+    echo -n "$REVERB_SECRET" > "$REVERB_SECRET_FILE"
+fi
+sed -i "s|^REVERB_APP_KEY=.*|REVERB_APP_KEY=${REVERB_KEY}|" /app/.env
+sed -i "s|^REVERB_APP_SECRET=.*|REVERB_APP_SECRET=${REVERB_SECRET}|" /app/.env
+
 # ── SQLite database ─────────────────────────────
 DB_PATH="${DB_DATABASE:-/app/data/cellar.sqlite}"
 if [ ! -f "$DB_PATH" ]; then
