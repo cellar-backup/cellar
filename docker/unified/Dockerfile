@@ -78,11 +78,11 @@ RUN chmod +x /entrypoint.sh
 RUN mkdir -p \
     /app/data \
     /data/repositories \
-    /var/log/cellar/jobs \
+    /app/data/logs \
     /var/log/supervisor \
     /var/run/nginx \
     storage/framework/{cache,sessions,testing,views} \
-    && chown -R www-data:www-data /app/data /data/repositories /var/log/cellar storage bootstrap/cache
+    && chown -R www-data:www-data /app/data /data/repositories storage bootstrap/cache
 
 # ── Environment defaults ─────────────────────────────────────
 ENV APP_ENV=production \
@@ -108,7 +108,7 @@ ENV APP_ENV=production \
     CELLAR_BORG_PATH=/usr/bin/borg \
     CELLAR_RESTIC_PATH=/usr/bin/restic \
     CELLAR_MAX_PARALLEL_JOBS=2 \
-    CELLAR_LOG_DIR=/var/log/cellar
+    CELLAR_LOG_DIR=/app/data/logs
 
 EXPOSE 8420
 

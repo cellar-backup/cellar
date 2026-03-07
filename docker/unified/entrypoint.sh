@@ -11,7 +11,7 @@ set -e
 echo "Cellar — starting up …"
 
 # ── Data directories ─────────────────────────────
-mkdir -p /app/data /data/repositories /var/log/cellar /var/log/nginx
+mkdir -p /app/data /app/data/logs /data/repositories /var/log/nginx
 
 # ── .env from template ───────────────────────────
 if [ -f /app/.env.docker ]; then
