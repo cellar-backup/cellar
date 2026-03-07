@@ -60,15 +60,19 @@ class JobController extends Controller
     {
         $content = JobLogger::read($job);
 
+        $status = $job->status instanceof \BackedEnum ? $job->status->value : (string) $job->status;
+
         if ($content === null) {
             return response()->json([
                 'content' => null,
+                'status' => $status,
                 'message' => 'No log file available for this job.',
             ]);
         }
 
         return response()->json([
             'content' => $content,
+            'status' => $status,
             'log_path' => $job->log_path,
         ]);
     }

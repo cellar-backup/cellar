@@ -404,8 +404,24 @@ export const usePlansStore = defineStore("plans", () => {
 
   async function fetchJobLog(
     jobId: string,
-  ): Promise<{ content: string | null; message?: string }> {
+  ): Promise<{ content: string | null; status?: string; message?: string }> {
     const { data } = await api.get(`/jobs/${jobId}/log`);
+
+    // Update job status from the log response — acts as a fallback
+    // when WebSocket events are missed (e.g. job failed while modal open)
+    if (data.status) {
+      const job = jobs.value.find((j) => j.id === jobId);
+      if (job && job.status !== data.status) {
+        job.status = data.status;
+        // For terminal statuses, refresh full state
+        if (data.status === "success" || data.status === "failed" || data.status === "cancelled") {
+          fetchPlans();
+          fetchJobs();
+          fetchArchives();
+        }
+      }
+    }
+
     return data;
   }
 
