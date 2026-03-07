@@ -65,6 +65,12 @@ onMounted(() => {
   store.fetchSources();
 });
 
+const sortedSources = computed(() =>
+  [...store.sources].sort((a, b) =>
+    (a.display_label ?? a.name).localeCompare(b.display_label ?? b.name),
+  ),
+);
+
 // Live elapsed time ticker
 const now = ref(Date.now());
 let tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -1064,7 +1070,7 @@ async function cancelJob(jobId: string, jobType: string) {
     <!-- Source cards -->
     <TransitionGroup name="list-item" tag="div" v-else class="mt-6 space-y-3">
       <div
-        v-for="source in store.sources"
+        v-for="source in sortedSources"
         :key="source.id"
         class="rounded-xl border bg-surface p-4 transition-all duration-300 cursor-pointer group"
         :class="
