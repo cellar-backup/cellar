@@ -64,6 +64,7 @@ Schedule::call(function () {
 // Reconcile the archives table with borg repos daily at 03:00
 Schedule::command('cellar:sync-archives')
     ->dailyAt('03:00')
+    ->timezone(cellarTimezone())
     ->name('cellar:sync-archives')
     ->withoutOverlapping();
 
@@ -76,7 +77,7 @@ Schedule::command('cellar:check-source-health')
 // Clean up old job log files daily at 04:00 (retain 30 days)
 Schedule::call(function () {
     \App\Services\JobLogger::cleanup(30);
-})->dailyAt('04:00')->name('cellar:cleanup-job-logs');
+})->dailyAt('04:00')->timezone(cellarTimezone())->name('cellar:cleanup-job-logs');
 
 /*
 |--------------------------------------------------------------------------
@@ -84,18 +85,27 @@ Schedule::call(function () {
 |--------------------------------------------------------------------------
 */
 
+function cellarTimezone(): string
+{
+    try {
+        return \App\Models\AppSetting::get('timezone', 'UTC') ?: 'UTC';
+    } catch (\Throwable) {
+        return 'UTC';
+    }
+}
+
 function cronMatchesNow(string $cron): bool
 {
     $expression = new \Cron\CronExpression($cron);
 
-    return $expression->isDue();
+    return $expression->isDue('now', cellarTimezone());
 }
 
 function nextCronRun(string $cron): \DateTimeInterface
 {
     $expression = new \Cron\CronExpression($cron);
 
-    return $expression->getNextRunDate();
+    return $expression->getNextRunDate('now', 0, false, cellarTimezone());
 }
 
 function shiftCronMinutes(string $cron, int $addMinutes): string
