@@ -11,7 +11,7 @@ set -e
 echo "Cellar — starting up …"
 
 # ── Data directories ─────────────────────────────
-mkdir -p /app/data /data/repositories /var/log/cellar /var/log/nginx
+mkdir -p /app/data /app/data/logs /data/repositories /var/log/nginx
 
 # ── .env from template ───────────────────────────
 if [ -f /app/.env.docker ]; then
@@ -36,6 +36,27 @@ if [ -f "$KEY_FILE" ]; then
 else
     php artisan key:generate --no-interaction
     grep "^APP_KEY=" /app/.env | cut -d= -f2- > "$KEY_FILE"
+fi
+
+# ── Reverb key persistence ───────────────────────
+REVERB_KEY_FILE="/app/data/.reverb_key"
+REVERB_SECRET_FILE="/app/data/.reverb_secret"
+if [ -f "$REVERB_KEY_FILE" ] && [ -f "$REVERB_SECRET_FILE" ]; then
+    REVERB_KEY=$(cat "$REVERB_KEY_FILE")
+    REVERB_SECRET=$(cat "$REVERB_SECRET_FILE")
+else
+    REVERB_KEY=$(head -c 20 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 20)
+    REVERB_SECRET=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
+    echo -n "$REVERB_KEY" > "$REVERB_KEY_FILE"
+    echo -n "$REVERB_SECRET" > "$REVERB_SECRET_FILE"
+fi
+sed -i "s|^REVERB_APP_KEY=.*|REVERB_APP_KEY=${REVERB_KEY}|" /app/.env
+sed -i "s|^REVERB_APP_SECRET=.*|REVERB_APP_SECRET=${REVERB_SECRET}|" /app/.env
+
+# Inject Reverb key into frontend SPA so Echo can connect
+SPA_INDEX="/app/public/spa/index.html"
+if [ -f "$SPA_INDEX" ]; then
+    sed -i "s|<head>|<head><script>window.__REVERB_KEY__=\"${REVERB_KEY}\";</script>|" "$SPA_INDEX"
 fi
 
 # ── SQLite database ─────────────────────────────

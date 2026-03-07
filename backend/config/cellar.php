@@ -21,7 +21,7 @@ return [
     'max_parallel_jobs' => (int) env('CELLAR_MAX_PARALLEL_JOBS', 2),
 
     // Logging
-    'log_dir' => env('CELLAR_LOG_DIR', '/var/log/cellar'),
+    'log_dir' => env('CELLAR_LOG_DIR', '/app/data/logs'),
 
     // Default admin credentials (used by SeedDefaults command)
     'admin_name' => env('CELLAR_ADMIN_NAME', 'admin'),
