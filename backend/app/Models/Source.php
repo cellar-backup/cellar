@@ -114,6 +114,15 @@ class Source extends Model
             return ! empty($path) && file_exists($path) && is_readable($path);
         }
 
+        // If configured for kubectl exec, test via the pod instead of direct network
+        $k8s = $this->extra_config['kubernetes'] ?? null;
+        $dumpMethod = $k8s['dump_method'] ?? null;
+
+        if ($dumpMethod === 'kubectl'
+            && $k8s && ! empty($k8s['cluster_id']) && ! empty($k8s['namespace']) && ! empty($k8s['app_name'])) {
+            return $this->checkConnectionViaKubectl($k8s);
+        }
+
         $host = $this->host ?: 'localhost';
         $port = $this->port ?: $this->source_type->defaultPort() ?? 5432;
         $user = $this->username ?: ($this->source_type->value === 'postgresql' ? 'postgres' : 'root');
@@ -142,6 +151,83 @@ class Source extends Model
         }
 
         return $result->successful();
+    }
+
+    /**
+     * Test connectivity by running a simple query inside the K8s pod via kubectl exec.
+     */
+    private function checkConnectionViaKubectl(array $k8s): bool
+    {
+        try {
+            $cluster = RadarCluster::find($k8s['cluster_id']);
+            if (! $cluster) {
+                return false;
+            }
+
+            $kubectlPath = config('cellar.kubectl_path', '/usr/local/bin/kubectl');
+            $tempKubeconfig = $cluster->writeKubeconfigTempFile();
+
+            try {
+                $kubectlConfig = [
+                    'kubectl_path' => $kubectlPath,
+                    'kubeconfig' => $tempKubeconfig,
+                    'context' => $cluster->context,
+                    'namespace' => $k8s['namespace'],
+                    'pod' => null,
+                ];
+
+                $podName = \App\Services\DatabaseDumper::findKubectlPod($kubectlConfig, $k8s['app_name']);
+                if (! $podName) {
+                    return false;
+                }
+
+                $kubectlConfig['pod'] = $podName;
+
+                $user = $this->username ?: ($this->source_type->value === 'postgresql' ? 'postgres' : 'root');
+                $database = $this->database_name ?: ($this->source_type->value === 'postgresql' ? 'postgres' : '');
+
+                $checkCmd = match ($this->source_type->value) {
+                    'postgresql' => "PGPASSWORD=".escapeshellarg($this->password ?? '')
+                        ." psql -U ".escapeshellarg($user)
+                        ." -d ".escapeshellarg($database)
+                        ." -c 'SELECT 1' --no-password -q",
+                    'mysql', 'mariadb' => "mysqladmin ping"
+                        ." -u ".escapeshellarg($user)
+                        .($this->password ? " --password=".escapeshellarg($this->password) : ""),
+                    default => null,
+                };
+
+                if ($checkCmd === null) {
+                    return false;
+                }
+
+                // Build kubectl exec command
+                $cmd = [$kubectlPath];
+                if (! empty($tempKubeconfig)) {
+                    $cmd[] = '--kubeconfig';
+                    $cmd[] = $tempKubeconfig;
+                }
+                if (! empty($cluster->context)) {
+                    $cmd[] = '--context';
+                    $cmd[] = $cluster->context;
+                }
+                $cmd = array_merge($cmd, [
+                    'exec', $podName,
+                    '-n', $k8s['namespace'],
+                    '--', 'sh', '-c', $checkCmd,
+                ]);
+
+                $result = Process::timeout(15)->run($cmd);
+
+                return $result->successful();
+            } finally {
+                if (file_exists($tempKubeconfig)) {
+                    @unlink($tempKubeconfig);
+                }
+            }
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     // ── Relationships ──────────────────────────────────────────
