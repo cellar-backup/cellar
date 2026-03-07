@@ -53,6 +53,12 @@ fi
 sed -i "s|^REVERB_APP_KEY=.*|REVERB_APP_KEY=${REVERB_KEY}|" /app/.env
 sed -i "s|^REVERB_APP_SECRET=.*|REVERB_APP_SECRET=${REVERB_SECRET}|" /app/.env
 
+# Inject Reverb key into frontend SPA so Echo can connect
+SPA_INDEX="/app/public/spa/index.html"
+if [ -f "$SPA_INDEX" ]; then
+    sed -i "s|<head>|<head><script>window.__REVERB_KEY__=\"${REVERB_KEY}\";</script>|" "$SPA_INDEX"
+fi
+
 # ── SQLite database ─────────────────────────────
 DB_PATH="${DB_DATABASE:-/app/data/cellar.sqlite}"
 if [ ! -f "$DB_PATH" ]; then

@@ -13,7 +13,7 @@ import Pusher from "pusher-js";
  */
 const echo = new Echo({
   broadcaster: "reverb",
-  key: "cellar-key",
+  key: (window as unknown as Record<string, string>).__REVERB_KEY__ ?? "cellar-key",
   wsHost: window.location.hostname,
   wsPort: Number(window.location.port) || 8420,
   wssPort: Number(window.location.port) || 8420,
