@@ -1,39 +1,44 @@
 # Cellar — AI Project Reference
 
-> **Generated:** 2025-03-04
+> **Updated:** 2026-03-07 (v0.8.0)
 > **Purpose:** Comprehensive project context for AI-assisted development.
+> **Local overrides:** See `AI.local.md` (gitignored) for machine-specific paths and credentials.
 
 ---
 
 ## 1. Overview
 
-**Cellar** is an open-source, container-native backup management platform for HomeLab operators. It provides deduplication-first backups (via BorgBackup/restic), database + filesystem support, custom backup documents, and a modern Vue 3 UI.
+**Cellar** is an open-source, container-native backup management platform for HomeLab operators. It provides deduplication-first backups (via BorgBackup), database + filesystem support, and a modern Vue 3 UI.
 
 - **Repo:** `github.com/cellar-backup/cellar`
 - **License:** Apache 2.0
 - **Default port:** 8420
-- **Default credentials:** `admin` / `changeme` (seeded via `cellar:seed-defaults`)
+- **Default credentials:** `admin` / `admin` (seeded via `cellar:seed-defaults`, changed during setup wizard)
 
-### Architecture (6 containers)
+### Architecture (unified single container)
 
-| Container          | Role             | Stack                          |
-| ------------------ | ---------------- | ------------------------------ |
-| `cellar-api`       | REST API         | PHP 8.4 + Laravel 12 + Sanctum |
-| `cellar-worker`    | Async job runner | Laravel Horizon + Redis        |
-| `cellar-scheduler` | Cron scheduler   | Laravel Scheduler              |
-| `cellar-ui`        | Frontend SPA     | Vue 3 + Vite + Tailwind CSS 4  |
-| `cellar-redis`     | Queue & cache    | Redis 7                        |
-| `cellar-proxy`     | Reverse proxy    | Caddy 2                        |
+All services run inside one container via supervisord:
 
-**Database:** SQLite by default (zero-config). Optional PostgreSQL override via `docker/docker-compose.postgres.yml`.
+| Process         | Role              | Stack                          |
+| --------------- | ----------------- | ------------------------------ |
+| **nginx**       | Reverse proxy     | Nginx (port 8420)              |
+| **api**         | REST API          | PHP 8.4 + Laravel 12 + Sanctum |
+| **horizon**     | Async job runner  | Laravel Horizon + Redis        |
+| **scheduler**   | Cron scheduler    | Laravel Scheduler              |
+| **reverb**      | WebSocket server  | Laravel Reverb                 |
+
+**External dependency:** Redis (required) — queue, cache, WebSocket pub/sub.
+
+**Database:** SQLite by default (zero config). PostgreSQL available via Docker Compose overlay.
 
 ### Roadmap
 
-| Phase      | Version   | Focus                                                          |
-| ---------- | --------- | -------------------------------------------------------------- |
-| Foundation | v0.1–v0.3 | Core backup/restore, Borg engine, local + S3, basic UI         |
-| Expansion  | v0.4–v0.7 | Custom documents, restore wizard, multi-backend, notifications |
-| Polish     | v0.8–v1.0 | Multi-user RBAC, audit log, metrics, mobile views, v1.0 launch |
+| Phase      | Version   | Status | Focus                                                          |
+| ---------- | --------- | ------ | -------------------------------------------------------------- |
+| Foundation | v0.1–v0.3 | Done   | Core backup/restore, Borg engine, local repos, basic UI        |
+| Expansion  | v0.4–v0.7 | Done   | Real-time WebSocket UI, database dumpers, retention policies, profiles, setup wizard |
+| Polish     | v0.8      | Now    | Timezone-aware scheduling, source health checks, kubectl connectivity, default profiles, system settings |
+| Release    | v0.9–v1.0 | Next   | Multi-user RBAC, audit log, notifications, restic engine, metrics dashboard, mobile views |
 
 ---
 
@@ -42,289 +47,142 @@
 ```
 cellar/
 ├── AI.md                 # This file
+├── AI.local.md           # Local/private context (gitignored)
+├── CLAUDE.md             # Points to AI.md (gitignored)
 ├── README.md
-├── CONTRIBUTING.md
-├── CODE_OF_CONDUCT.md
-├── LICENSE
+├── .github/workflows/ci.yml  # CI pipeline
 ├── Makefile
 ├── docker-compose.yml
-├── logo.svg
-├── .env                  # Root env (CELLAR_PORT, debug flags)
 │
 ├── backend/              # Laravel 12 project
-│   ├── .env              # Local dev env (APP_KEY, DB, Redis, etc.)
-│   ├── .env.docker       # Docker runtime env
-│   ├── .env.example      # Template
-│   ├── composer.json
-│   ├── artisan
-│   ├── phpunit.xml
 │   ├── app/
-│   │   ├── Console/Commands/
-│   │   ├── Enums/        # 8 PHP backed enums
-│   │   ├── Http/
-│   │   │   ├── Controllers/
-│   │   │   │   └── Api/V1/  # 10 controllers
-│   │   │   └── Requests/
-│   │   ├── Jobs/         # 4 queue jobs
-│   │   ├── Models/       # 10 Eloquent models
-│   │   ├── Observers/
-│   │   ├── Providers/
+│   │   ├── Console/Commands/   # 3 Artisan commands
+│   │   ├── Enums/              # 8 PHP backed enums
+│   │   ├── Events/             # JobUpdated broadcast event
+│   │   ├── Http/Controllers/Api/V1/  # 13 controllers
+│   │   ├── Jobs/               # 4 queue jobs
+│   │   ├── Models/             # 12 Eloquent models
+│   │   ├── Observers/          # JobObserver
+│   │   ├── Providers/          # AppServiceProvider
 │   │   └── Services/
 │   │       ├── DatabaseDumper.php
+│   │       ├── DatabaseInspector.php
 │   │       ├── DatabaseRestorer.php
+│   │       ├── JobLogger.php
 │   │       ├── KubernetesDiscovery.php
 │   │       └── Engines/
-│   │           ├── BackupEngine.php  (interface + DTOs)
+│   │           ├── BackupEngine.php  (interface)
 │   │           └── BorgEngine.php    (implementation)
-│   ├── config/
-│   │   └── cellar.php    # Cellar-specific config
-│   ├── database/migrations/  # 13 migration files
+│   ├── config/cellar.php       # Cellar-specific config
+│   ├── database/migrations/    # 18 migration files
 │   └── routes/
-│       ├── api.php       # API routes (v1, Sanctum auth)
-│       └── console.php   # Scheduler definitions
+│       ├── api.php             # API routes (v1, Sanctum auth)
+│       ├── channels.php        # WebSocket channel auth
+│       └── console.php         # Scheduler + cron helpers
 │
 ├── frontend/             # Vue 3 SPA
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── vite.config.ts
 │   ├── src/
-│   │   ├── App.vue
-│   │   ├── main.ts
-│   │   ├── lib/api.ts        # Axios instance with auth interceptors
-│   │   ├── router/index.ts   # Vue Router with auth guards
-│   │   ├── stores/           # 4 Pinia stores
+│   │   ├── components/
+│   │   │   ├── layout/AppSidebar.vue  # Global sidebar + WebSocket subscription
+│   │   │   ├── ConfirmModal.vue
+│   │   │   └── JobLogModal.vue
+│   │   ├── composables/useConfirm.ts
+│   │   ├── lib/
+│   │   │   ├── api.ts          # Axios instance with auth interceptors
+│   │   │   ├── echo.ts         # Laravel Echo (Reverb) client
+│   │   │   └── utils.ts
+│   │   ├── router/index.ts     # Vue Router with auth guards
+│   │   ├── stores/             # 5 Pinia stores
 │   │   │   ├── auth.ts
 │   │   │   ├── plans.ts
 │   │   │   ├── radar.ts
+│   │   │   ├── settings.ts
 │   │   │   └── sources.ts
-│   │   ├── views/            # 9 view components
-│   │   │   ├── ArchivesView.vue
-│   │   │   ├── DashboardView.vue
-│   │   │   ├── JobsView.vue
-│   │   │   ├── LoginView.vue
-│   │   │   ├── LogsView.vue
-│   │   │   ├── PlansView.vue
-│   │   │   ├── RadarView.vue
-│   │   │   ├── SettingsView.vue
-│   │   │   └── SourcesView.vue
-│   │   ├── components/
-│   │   └── assets/
-│   └── index.html
+│   │   └── views/              # 10 view components
+│   │       ├── SetupView.vue        # First-time setup wizard
+│   │       ├── DashboardView.vue
+│   │       ├── SourcesView.vue
+│   │       ├── PlansView.vue
+│   │       ├── ArchivesView.vue
+│   │       ├── JobsView.vue
+│   │       ├── RadarView.vue
+│   │       ├── SettingsView.vue     # System + Retention + Schedule tabs
+│   │       ├── LoginView.vue
+│   │       └── LogsView.vue
+│   └── vite.config.ts
 │
 └── docker/
-    ├── Dockerfile.api            # PHP 8.4-cli + borg + restic + kubectl + DB clients
-    ├── Dockerfile.ui             # Node 20 build → nginx
-    ├── Caddyfile                 # Reverse proxy on :8420
-    ├── nginx.conf                # SPA fallback + API proxy
-    ├── entrypoint.sh             # Migrations + seed on boot
-    └── docker-compose.postgres.yml  # PostgreSQL override
+    ├── unified/
+    │   ├── Dockerfile          # Multi-stage: Node build + PHP runtime
+    │   ├── entrypoint.sh       # Migrations + seed on boot
+    │   ├── nginx.conf          # SPA + API proxy + WebSocket proxy
+    │   └── supervisord.conf    # All 5 processes
+    ├── kubernetes/cellar.yaml  # Sample K8s manifest
+    └── docker-compose.postgres.yml  # PostgreSQL overlay
 ```
 
 ---
 
-## 3. Docker Compose (default)
+## 3. CI Pipeline
 
-```yaml
-services:
-  cellar-redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: redis-server --save 60 1 --loglevel warning
-    volumes:
-      - cellar-redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+**File:** `.github/workflows/ci.yml`
 
-  cellar-api:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.api
-    restart: unless-stopped
-    depends_on:
-      cellar-redis:
-        condition: service_healthy
-    environment:
-      APP_ENV: ${APP_ENV:-production}
-      APP_DEBUG: ${CELLAR_DEBUG:-false}
-      APP_URL: ${APP_URL:-http://localhost:8420}
-      DB_DATABASE: /app/data/cellar.sqlite
-      REDIS_HOST: cellar-redis
-      QUEUE_CONNECTION: redis
-      CACHE_STORE: redis
-      SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:-localhost:8420,localhost}
-    volumes:
-      - cellar-data:/app/data
-      - cellar-repos:/data/repositories
-      - cellar-logs:/var/log/cellar
+Triggers: push to `main`, push tags `v*`, PRs to `main`.
 
-  cellar-worker:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.api
-    restart: unless-stopped
-    command: php artisan horizon
-    depends_on:
-      cellar-api:
-        condition: service_started
-    environment:
-      APP_ENV: ${APP_ENV:-production}
-      APP_DEBUG: ${CELLAR_DEBUG:-false}
-      DB_DATABASE: /app/data/cellar.sqlite
-      REDIS_HOST: cellar-redis
-      QUEUE_CONNECTION: redis
-      CACHE_STORE: redis
-    volumes:
-      - cellar-data:/app/data
-      - cellar-repos:/data/repositories
-      - cellar-logs:/var/log/cellar
+| Job      | Runs                                              | When                      |
+| -------- | ------------------------------------------------- | ------------------------- |
+| Backend  | PHP 8.4, Composer, `php artisan test` (SQLite)    | Always                    |
+| Frontend | Node 20, `vue-tsc --noEmit`, `vite build`         | Always                    |
+| Docker   | Build & push to `ghcr.io/cellar-backup/cellar`    | Push to main or version tag |
 
-  cellar-scheduler:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.api
-    restart: unless-stopped
-    command: php artisan schedule:work
-    depends_on:
-      cellar-api:
-        condition: service_started
-    environment:
-      APP_ENV: ${APP_ENV:-production}
-      APP_DEBUG: ${CELLAR_DEBUG:-false}
-      DB_DATABASE: /app/data/cellar.sqlite
-      REDIS_HOST: cellar-redis
-      QUEUE_CONNECTION: redis
-      CACHE_STORE: redis
-    volumes:
-      - cellar-data:/app/data
-
-  cellar-ui:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.ui
-    restart: unless-stopped
-    depends_on:
-      - cellar-api
-
-  cellar-proxy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "${CELLAR_PORT:-8420}:8420"
-    volumes:
-      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
-      - cellar-caddy-data:/data
-    depends_on:
-      - cellar-ui
-      - cellar-api
-
-volumes:
-  cellar-data:
-  cellar-repos:
-  cellar-redis-data:
-  cellar-logs:
-  cellar-caddy-data:
-```
+Docker tags: `latest` (on main), `0.9.0` (on `v0.9.0` tag), `sha-xxxxx`, branch name.
 
 ---
 
-## 4. Environment Files
+## 4. Key Patterns
 
-### Root `.env`
+### WebSocket (Real-time updates)
 
-```dotenv
-CELLAR_SECRET_KEY=dev-secret-key-not-for-production
-CELLAR_DEBUG=true
-CELLAR_LOG_LEVEL=DEBUG
-CELLAR_ALLOWED_HOSTS=*
-CELLAR_TIMEZONE=UTC
-CELLAR_PORT=8420
-CELLAR_MAX_PARALLEL_JOBS=2
-```
+- **Server:** Laravel Reverb (internal port 8080, proxied via nginx at `/app/{id}`)
+- **Client:** Laravel Echo + Pusher.js in `frontend/src/lib/echo.ts`
+- **Channel:** `jobs` (public) — broadcasts `JobUpdated` events on job create/update
+- **Subscription:** Single global listener in `AppSidebar.vue` — do NOT subscribe per-view (causes channel teardown on navigation)
+- **Store handler:** `plansStore.handleJobEvent(event)` uses `patchArray()` for reactive updates
 
-### `backend/.env.docker` (Docker runtime)
+### Pinia Stores
 
-```dotenv
-APP_NAME=Cellar
-APP_ENV=production
-APP_KEY=                     # Auto-generated and persisted by entrypoint.sh
-APP_DEBUG=false
-APP_URL=http://localhost:8420
-LOG_CHANNEL=stack
-LOG_STACK=single
-LOG_LEVEL=info
-DB_CONNECTION=sqlite
-DB_DATABASE=/app/data/cellar.sqlite
-SESSION_DRIVER=cookie
-SESSION_LIFETIME=120
-QUEUE_CONNECTION=redis
-CACHE_STORE=redis
-REDIS_CLIENT=phpredis
-REDIS_HOST=cellar-redis
-REDIS_PORT=6379
-REDIS_PASSWORD=null
-SANCTUM_STATEFUL_DOMAINS=localhost:8420,localhost
+- `patchArray()` utility for in-place reactive array updates (match by `id`, update existing or push new)
+- Sorted views use `computed()` (e.g., `sortedSources` sorts by `display_label`)
 
-# Cellar-specific
-CELLAR_BORG_PATH=/usr/bin/borg
-CELLAR_RESTIC_PATH=/usr/bin/restic
-CELLAR_MAX_PARALLEL_JOBS=2
-CELLAR_LOG_DIR=/var/log/cellar
-CELLAR_ADMIN_NAME=admin
-CELLAR_ADMIN_EMAIL=admin@cellar.local
-CELLAR_ADMIN_PASSWORD=admin          # ⚠️  SENSITIVE — default seed password
-```
+### Database & Auth
 
-### `backend/.env` (Local development)
+- All models use UUID primary keys (`HasUuids` trait)
+- Encrypted-at-rest: repo configs, source passwords, kubeconfig files (`encrypted` / `encrypted:array` casts)
+- Sanctum Bearer tokens stored in `localStorage("cellar_access_token")`
 
-Standard Laravel `.env` with SQLite, `APP_KEY` set, `QUEUE_CONNECTION=database`, `CACHE_STORE=database`. No Cellar-specific values (uses config defaults).
+### Scheduler (routes/console.php)
+
+- Timezone-aware: `cellarTimezone()` reads from `AppSetting('timezone')` with try/catch (safe during Docker build)
+- `cronMatchesNow()` and `nextCronRun()` pass timezone to `CronExpression`
+- Prune runs 30 minutes after each backup cron via `shiftCronMinutes()`
+- Daily tasks: `sync-archives` at 03:00, `cleanup-job-logs` at 04:00
+- Health checks: `check-source-health` every 15 minutes
+
+### Profiles & Settings
+
+- `Profile` model: reusable retention and schedule presets with `is_default` flag
+- `AppSetting` model: key-value store for system settings (timezone, max_parallel_jobs, app_url)
+- `AppServiceProvider::boot()` overrides Horizon `maxProcesses` from `AppSetting` at runtime
+- Default profiles seeded by `cellar:seed-defaults`: "Standard" retention + "Daily at 02:00" schedule
+
+### Source Health
+
+- `Source::checkConnection()` routes through kubectl exec when `dump_method: 'kubectl'`
+- `cellar:check-source-health` command runs every 15 minutes, updates `health_status` and `last_health_check`
 
 ---
 
-## 5. Backend Configuration — `config/cellar.php`
-
-```php
-return [
-    'version' => env('CELLAR_VERSION', '0.1.0'),
-    'borg_path' => env('CELLAR_BORG_PATH', '/usr/bin/borg'),
-    'restic_path' => env('CELLAR_RESTIC_PATH', '/usr/bin/restic'),
-    'kubectl_path' => env('CELLAR_KUBECTL_PATH', '/usr/local/bin/kubectl'),
-    'max_parallel_jobs' => (int) env('CELLAR_MAX_PARALLEL_JOBS', 2),
-    'log_dir' => env('CELLAR_LOG_DIR', '/var/log/cellar'),
-    'admin_name' => env('CELLAR_ADMIN_NAME', 'admin'),
-    'admin_email' => env('CELLAR_ADMIN_EMAIL', 'admin@cellar.local'),
-    'admin_password' => env('CELLAR_ADMIN_PASSWORD', 'admin'),
-];
-```
-
----
-
-## 6. Backend Dependencies — `composer.json`
-
-```
-require:
-  php: ^8.2
-  laravel/framework: ^12.0
-  laravel/horizon: ^5.45
-  laravel/sanctum: ^4.3
-  laravel/tinker: ^2.10.1
-
-require-dev:
-  fakerphp/faker, laravel/pail, laravel/pint, laravel/sail,
-  mockery/mockery, nunomaduro/collision, phpunit/phpunit
-```
-
-Key scripts:
-
-- `composer setup` — install, env, key:generate, migrate, npm install+build
-- `composer dev` — concurrently runs `artisan serve`, `queue:listen`, `pail`, `npm run dev`
-- `composer test` — `config:clear` + `artisan test`
-
----
-
-## 7. API Routes — `routes/api.php`
+## 5. API Routes — `routes/api.php`
 
 All routes prefixed with `/api/v1`. Auth uses Laravel Sanctum tokens.
 
@@ -333,6 +191,7 @@ All routes prefixed with `/api/v1`. Auth uses Laravel Sanctum tokens.
 | Method | Path            | Controller/Action         |
 | ------ | --------------- | ------------------------- |
 | POST   | `auth/login`    | `AuthController@login`    |
+| POST   | `setup`         | `SetupController@store`   |
 | GET    | `system/health` | `SystemController@health` |
 
 ### Authenticated (Sanctum)
@@ -347,21 +206,33 @@ All routes prefixed with `/api/v1`. Auth uses Laravel Sanctum tokens.
 | CRUD   | `sources`                                     | `SourceController` (apiResource)      |
 | POST   | `sources/quick-add`                           | `SourceController@quickAdd`           |
 | POST   | `sources/{id}/test-connection`                | `SourceController@testConnection`     |
+| PATCH  | `sources/{id}/toggle`                         | `SourceController@toggle`             |
+| PATCH  | `sources/{id}/retention`                      | `SourceController@updateRetention`    |
+| PATCH  | `sources/{id}/dump-method`                    | `SourceController@updateDumpMethod`   |
+| GET    | `sources/{id}/policies`                       | `SourceController@policies`           |
+| GET    | `sources/{id}/archives`                       | `SourceController@archives`           |
 | CRUD   | `plans`                                       | `BackupPlanController` (apiResource)  |
 | POST   | `plans/{id}/backup`                           | `BackupPlanController@backup`         |
 | POST   | `plans/{id}/restore`                          | `BackupPlanController@restore`        |
 | POST   | `plans/{id}/prune`                            | `BackupPlanController@prune`          |
 | POST   | `plans/{id}/verify`                           | `BackupPlanController@verify`         |
+| PATCH  | `plans/{id}/toggle`                           | `BackupPlanController@toggle`         |
 | GET    | `jobs`                                        | `JobController@index`                 |
 | GET    | `jobs/{id}`                                   | `JobController@show`                  |
+| GET    | `jobs/{id}/log`                               | `JobController@log`                   |
+| POST   | `jobs/{id}/cancel`                            | `JobController@cancel`                |
 | GET    | `archives`                                    | `ArchiveController@index`             |
 | GET    | `archives/{id}`                               | `ArchiveController@show`              |
+| PATCH  | `archives/{id}`                               | `ArchiveController@update`            |
 | DELETE | `archives/{id}`                               | `ArchiveController@destroy`           |
+| PATCH  | `archives/{id}/keep-forever`                  | `ArchiveController@keepForever`       |
 | POST   | `archives/{id}/restore`                       | `ArchiveController@restore`           |
 | GET    | `archives/{id}/download`                      | `ArchiveController@download`          |
 | CRUD   | `notifications`                               | `NotificationChannelController`       |
 | CRUD   | `documents`                                   | `DocumentController`                  |
-| POST   | `documents/{id}/test`                         | `DocumentController@test`             |
+| CRUD   | `profiles`                                    | `ProfileController`                   |
+| GET    | `settings`                                    | `SettingsController@index`            |
+| PUT    | `settings`                                    | `SettingsController@update`           |
 | GET    | `kubernetes/clusters`                         | `KubernetesController@clusters`       |
 | POST   | `kubernetes/clusters`                         | `KubernetesController@storeCluster`   |
 | PUT    | `kubernetes/clusters/{id}`                    | `KubernetesController@updateCluster`  |
@@ -373,476 +244,103 @@ All routes prefixed with `/api/v1`. Auth uses Laravel Sanctum tokens.
 | POST   | `kubernetes/clusters/{id}/ignore`             | `KubernetesController@ignore`         |
 | GET    | `kubernetes/clusters/{id}/ignored`            | `KubernetesController@ignored`        |
 | DELETE | `kubernetes/clusters/{id}/ignored/{ignoreId}` | `KubernetesController@unignore`       |
+| POST   | `kubernetes/clusters/{id}/list-databases`     | `KubernetesController@listDatabases`  |
 
 ---
 
-## 8. Scheduler — `routes/console.php`
+## 6. Enums
 
-- **Every minute:** Evaluates all `schedule_enabled` plans with `schedule_cron`, dispatches `RunBackup` for matching cron expressions.
-- **Every minute (offset +30min):** Dispatches `RunPrune` for plans with retention policies.
-- **Daily at 03:00:** Runs `cellar:sync-archives` command to reconcile DB with borg repos.
-
-Uses `CronExpression` library for dynamic per-plan cron matching. Helper functions: `cronMatchesNow()`, `nextCronRun()`, `shiftCronMinutes()`.
-
----
-
-## 9. Enums
-
-### `BackendType` — Repository storage backends
-
-`local`, `s3`, `b2`, `r2`, `gcs`, `azure`, `sftp`, `smb`, `nfs`, `rclone`
-
-### `ChannelType` — Notification channels
-
-`email`, `slack`, `discord`, `telegram`, `gotify`, `ntfy`, `apprise`, `webhook`
-
-### `EngineType` — Backup engines
-
-`borg`, `restic`
-
-### `JobStatus` — Job lifecycle states
-
-`pending`, `running`, `success`, `failed`, `cancelled`
-
-### `JobType` — Job operation types
-
-`backup`, `restore`, `export`, `prune`, `verify`
-
-### `PlanStatus` — Backup plan health
-
-`healthy`, `warning`, `failed`, `running`, `idle`
-
-### `RepoStatus` — Repository connectivity
-
-`online`, `offline`, `degraded`, `unknown`
-
-### `SourceType` — Data source types
-
-`postgresql`, `mysql`, `mariadb`, `mongodb`, `sqlite`, `redis`, `directory`, `docker_volume`
-
-Methods:
-
-- `isDatabase()` — returns `true` for postgresql, mysql, mariadb, mongodb, sqlite, redis
-- `defaultPort()` — returns standard port for DB types (5432, 3306, 27017, 6379)
+| Enum          | Values                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| `BackendType` | local, s3, b2, r2, gcs, azure, sftp, smb, nfs, rclone                                     |
+| `ChannelType` | email, slack, discord, telegram, gotify, ntfy, apprise, webhook                             |
+| `EngineType`  | borg, restic                                                                               |
+| `JobStatus`   | pending, running, success, failed, cancelled                                                |
+| `JobType`     | backup, restore, export, prune, verify                                                     |
+| `PlanStatus`  | healthy, warning, failed, running, idle                                                    |
+| `RepoStatus`  | online, offline, degraded, unknown                                                         |
+| `SourceType`  | postgresql, mysql, mariadb, mongodb, sqlite, redis, directory, docker_volume. Methods: `isDatabase()`, `defaultPort()` |
 
 ---
 
-## 10. Models
+## 7. Models (12)
 
 All models use UUID primary keys (`HasUuids` trait).
 
-### `User`
-
-- Fields: `name`, `username`, `email`, `password`
-- Traits: `HasApiTokens`, `HasFactory`, `Notifiable`
-- Casts: `email_verified_at` → datetime, `password` → hashed
-
-### `Repository`
-
-- Fields: `name`, `description`, `backend_type`, `status`, `is_default`, `config`, `capacity_bytes`, `used_bytes`, `last_checked`
-- Casts: `backend_type` → `BackendType`, `status` → `RepoStatus`, `config` → `encrypted:array`
-- Relations: `hasMany(BackupPlan)`
-- Accessor: `plan_count`
-
-### `Source`
-
-- Fields: `name`, `source_type`, `host`, `port`, `username`, `password`, `database_name`, `path`, `enabled`, `notes`, `extra_config`
-- Casts: `source_type` → `SourceType`, `password` → `encrypted`, `extra_config` → `array`
-- Auto-fill: default port on save, auto-generated name
-- Relations: `hasMany(BackupPlan)`
-- Accessors: `is_database`, `display_label`
-
-### `BackupPlan`
-
-- Fields: `name`, `source_id`, `repository_id`, `engine`, `status`, `schedule_cron`, `schedule_enabled`, `next_run`, `last_run`, `retention_policy`, `compression`, `encryption`, `pre_hook`, `post_hook`
-- Casts: `engine` → `EngineType`, `status` → `PlanStatus`, `retention_policy` → `array`
-- Default retention: `{ keep_daily: 7, keep_weekly: 4, keep_monthly: 6 }`
-- Relations: `belongsTo(Source)`, `belongsTo(Repository)`, `hasMany(Job)`, `hasMany(Archive)`, `hasMany(NotificationChannel)`
-- Accessors: `source_name`, `source_type`, `repository_name`
-
-### `Job`
-
-- Table: `backup_jobs`
-- Fields: `plan_id`, `job_type`, `status`, `started_at`, `finished_at`, `log_path`, `error_message`, `metadata`, `created_at`
-- Casts: `job_type` → `JobType`, `status` → `JobStatus`, `metadata` → `array`
-- Relations: `belongsTo(BackupPlan)`
-
-### `Archive`
-
-- Fields: `plan_id`, `archive_id`, `timestamp`, `size_original`, `size_dedup`, `size_compressed`, `duration`, `file_count`, `metadata`, `created_at`
-- Casts: all sizes → integer, `metadata` → `array`
-- Relations: `belongsTo(BackupPlan)`
-
-### `NotificationChannel`
-
-- Fields: `name`, `channel_type`, `config`, `events_filter`, `enabled`, `backup_plan_id`
-- Casts: `channel_type` → `ChannelType`, `config` → `encrypted:array`, `events_filter` → `array`
-- Relations: `belongsTo(BackupPlan)`
-
-### `CustomDocument`
-
-- Fields: `name`, `version`, `description`, `backup_command`, `restore_command`, `health_check`, `env_vars`, `stream_to_engine`
-- Casts: `env_vars` → `array`, `stream_to_engine` → `boolean`
-
-### `RadarIgnore`
-
-- Table: `radar_ignores`
-- Fields: `resource_key` (unique), `namespace`, `name`, `kind`, `source_type`, `reason`
-- Used by Kubernetes Radar to persist ignored discovered resources so they don't reappear on subsequent scans
+| Model               | Table                  | Key Relations & Notes                                                           |
+| -------------------- | ---------------------- | ------------------------------------------------------------------------------- |
+| `User`               | users                  | Sanctum tokens, hashed password cast                                            |
+| `Repository`         | repositories           | `config` encrypted:array, hasMany BackupPlan                                    |
+| `Source`             | sources                | `password` encrypted, auto-default retention from Profile on save, hasMany BackupPlan |
+| `BackupPlan`         | backup_plans           | belongsTo Source + Repository, hasMany Job + Archive                            |
+| `Job`                | backup_jobs            | belongsTo BackupPlan, `progress` (0-100), broadcast via JobObserver             |
+| `Archive`            | archives               | belongsTo BackupPlan, tags/notes, keep_forever pin                              |
+| `Profile`            | profiles               | type: retention/schedule, `is_default` flag, scopes: `retention()`, `schedule()` |
+| `AppSetting`         | app_settings           | key-value store, static `get()`/`set()` helpers                                 |
+| `NotificationChannel`| notification_channels  | belongsTo BackupPlan, `config` encrypted:array                                 |
+| `CustomDocument`     | custom_documents       | User-defined backup/restore commands                                            |
+| `RadarCluster`       | radar_clusters         | `kubeconfig` encrypted, hasMany RadarIgnore                                     |
+| `RadarIgnore`        | radar_ignores          | belongsTo RadarCluster, `resource_key` unique                                   |
 
 ---
 
-## 11. Queue Jobs
+## 8. Queue Jobs
 
-All jobs are queued (Redis via Horizon). They create a `Job` record, update plan status, and handle cleanup on failure.
+All queued via Redis/Horizon. Create a `Job` record, update plan status, broadcast progress via `JobUpdated` event.
 
-### `RunBackup`
-
-- **Timeout:** 28800s (8h), **Tries:** 2
-- Flow: Load plan → create job record → init borg repo if needed → estimate DB size → dump database (if DB source) to temp dir with real-time progress polling → run `borg create` → create `Archive` record → update job status
-- **Progress tracking:** For database sources, queries `pg_database_size()` / `information_schema` to estimate DB size, then runs the dump non-blocking (`Process::start()`) and polls output file/directory size every 3 seconds. Maps dump progress (0–100%) to job progress 12–55%. Borg phase is 60–90% (staged). Filesystem sources keep staged jumps.
-- Cleans up temp dump directory in `finally` block
-
-### `RunPrune`
-
-- **Timeout:** 3600s, **Tries:** 1
-- Runs `borg prune` with plan's retention policy. Supports `dryRun` mode.
-- Reconciles DB archives after pruning (deletes Archive records for pruned archives)
-
-### `RunRestore`
-
-- **Timeout:** 7200s, **Tries:** 1
-- Extracts borg archive to temp dir → finds dump file → restores to source DB via `DatabaseRestorer`
-- Searches for files with extensions: `.sql.gz`, `.dump`, `.sql`, `.pg_dump`
-
-### `RunVerify`
-
-- **Timeout:** 3600s, **Tries:** 1
-- Runs `borg check` on repo or specific archive. Records pass/fail in job metadata.
+| Job          | Timeout | Flow                                                                                   |
+| ------------ | ------- | -------------------------------------------------------------------------------------- |
+| `RunBackup`  | 8h      | Init borg repo → estimate DB size → dump with progress polling → `borg create` → Archive record |
+| `RunPrune`   | 1h      | `borg prune` with retention policy → reconcile Archive records                          |
+| `RunRestore` | 2h      | `borg extract` → find dump file → restore via DatabaseRestorer                          |
+| `RunVerify`  | 1h      | `borg check` on repo or specific archive                                                |
 
 ---
 
-## 12. Services
+## 9. Services
 
-### `DatabaseDumper`
-
-Dispatches to `pg_dump` (PostgreSQL, directory format `-Fd` for direct, custom format `-Fc` for kubectl) or `mysqldump` (MySQL/MariaDB). Returns `DumpResult` DTO with success, path, size, message.
-
-**Progress tracking:** Accepts optional `Closure $onProgress` callback. When provided, estimates DB size (`pg_database_size()` for PostgreSQL, `information_schema` for MySQL), runs the dump non-blocking via `Process::start()`, and polls output file/directory size every 3 seconds. Reports progress as `bytes_written / estimated_size` (capped at 95%). Estimation factors: direct pg_dump uses `raw_size × 0.7`; kubectl pg_dump uses `raw_size / 5` (compressed format). Falls back to blocking `Process::run()` when no callback or estimation fails.
-
-### `DatabaseRestorer`
-
-Restores dumps via `pg_restore` (custom format) or `psql` (plain SQL) for PostgreSQL, and `mysql` CLI for MySQL/MariaDB. Auto-detects dump format by reading first 5 bytes (`PGDMP` = custom format).
-
-### `BackupEngine` (Interface)
-
-Defines contract: `initialize()`, `backup()`, `restore()`, `listArchives()`, `getArchiveInfo()`, `getRepoInfo()`, `prune()`, `verify()`, `deleteArchive()`.
-
-DTOs: `BackupResult`, `RestoreResult`, `PruneResult`, `ArchiveInfo`, `RepoInfo`.
-
-### `BorgEngine` (Implementation)
-
-Wraps borg CLI commands via Laravel `Process` facade. Parses JSON output (`--json` flag). Handles environment variables (`BORG_PASSPHRASE`, relocated repo access). Exit code 0-1 = OK, 2+ = error.
-
-Key methods:
-
-- `initialize(repoPath, encryption='none')` — `borg init`
-- `backup(repoPath, sourcePaths, archiveName, excludePatterns, compression='lz4')` — `borg create --stats --json`
-- `restore(repoPath, archiveId, targetPath)` — `borg extract` (sets CWD to targetPath)
-- `listArchives(repoPath)` — `borg list --json`
-- `prune(repoPath, keepPolicy, dryRun)` — `borg prune --stats --list`
-- `verify(repoPath, archiveId?)` — `borg check`
-- `deleteArchive(repoPath, archiveId)` — `borg delete`
-
-### `KubernetesDiscovery`
-
-Auto-discovers databases and backup-eligible PVCs in a Kubernetes cluster. Works in two modes:
-
-1. **In-cluster** — uses default ServiceAccount (no kubeconfig needed)
-2. **Out-of-cluster** — uses a kubeconfig file and/or explicit context
-
-Wraps `kubectl` via Laravel `Process` facade with JSON output parsing.
-
-Key features:
-
-- **Image detection** — maps container images to source types (e.g., `postgres:16` → `postgresql`, `redis:7` → `redis`)
-- **Port detection** — known DB ports (5432, 3306, 27017, 6379) trigger source type classification
-- **Pod scanning** — inspects all pods for database containers
-- **Service scanning** — inspects service ports for database endpoints; uses `app.kubernetes.io/name` or `app` labels (and selector) to resolve the canonical app name so that multiple services (ClusterIP, LoadBalancer, etc.) for the same database group together
-- **PVC scanning** — lists bound PersistentVolumeClaims as potential directory backup targets
-- **External access detection** — for services, detects NodePort, LoadBalancer (ingress IP/hostname), ExternalName, and `spec.externalIPs`. Returns `external_host`, `external_port`, `node_port`, `service_type` alongside internal host/port so the UI can suggest reachable endpoints.
-- **Secret credential discovery** — scans Opaque secrets for known credential keys (password, username, database variants for MariaDB/MySQL/PostgreSQL/MongoDB/Redis). Matches secrets to discovered resources via `app.kubernetes.io/name` label, with **name-based fallback**: if a secret name starts with a discovered app name (e.g., `mariadb-credentials` → `mariadb`), it is associated even without labels. `discoverSecrets()` accepts `$appNamesByNs` (keyed by namespace) for this heuristic. Returns `credentials[]` array per resource with `{secret_name, key, value}`.
-- **Deduplication & grouping** — groups Pod + Service entries for the same database (`namespace:canonicalName:source_type` key) into a single resource with an `endpoints[]` array. Each endpoint carries `resource_name` (actual K8s resource name). Endpoints sorted neutrally: Service → Pod → PVC (no sub-ordering within services — user picks). Top-level fields prefer Service.
-- Returns discovered resources with host, port, namespace, kind, image, external access fields, `endpoints[]` array, and `credentials[]` array
-- Factory method: `fromCluster(RadarCluster)` — creates instance from a saved cluster, writing kubeconfig content to a temp file (cleaned up in `__destruct`)
-
-### `DatabaseInspector`
-
-Lists available databases on discovered endpoints using a **dual strategy**. Used by Radar's import review to let users pick which databases to back up.
-
-**Strategy 1 — Direct PDO** (tried first when host is externally reachable, skipped for `.svc.cluster.local` hosts):
-
-- **PostgreSQL** — PDO `pgsql`, queries `pg_database`
-- **MySQL / MariaDB** — PDO `mysql`, `SHOW DATABASES`
-
-**Strategy 2 — kubectl exec fallback** (used when Cellar runs outside the K8s cluster, e.g., Docker on host):
-
-- Runs DB CLI inside the discovered pod via `kubectl exec <pod> -n <namespace> -- sh -c "<query_cmd>"`
-- `KUBECTL_COMMANDS` constant defines per-engine commands: `psql -U %s -d postgres -t -A -c "SELECT datname..."` for PostgreSQL, `mysql -u %s %s -N -e "SHOW DATABASES"` for MySQL/MariaDB
-- `buildKubectlExecCommand()` constructs the full command array including kubeconfig and context from `$kubectlContext`
-- Uses Laravel `Process::timeout(15)->run()` for execution
-
-**Common:**
-
-- **MongoDB** — `mongosh` CLI, `listDatabases` admin command
-- **Redis** — not supported (no concept of named databases)
-- Returns `{databases: string[], error: string|null}` with friendly error messages
-- System DB exclusion in `SYSTEM_DBS` constant (template0/1, information_schema, mysql, performance_schema, sys, etc.)
-- `listDatabases(type, host, port, user, pass, kubectlContext?)` — public API, orchestrates both strategies
+| Service              | Purpose                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------ |
+| `DatabaseDumper`     | pg_dump / mysqldump with progress tracking (non-blocking `Process::start()` + size polling) |
+| `DatabaseRestorer`   | pg_restore / psql / mysql CLI, auto-detects dump format                                     |
+| `DatabaseInspector`  | Lists databases via direct PDO or kubectl exec fallback                                     |
+| `BorgEngine`         | Wraps borg CLI (`--json` output), implements `BackupEngine` interface                       |
+| `KubernetesDiscovery`| Auto-discovers DBs and PVCs in K8s clusters, deduplication, credential discovery            |
+| `JobLogger`          | Per-job log files in `/var/log/cellar/jobs/`, with cleanup (30-day retention)                |
 
 ---
 
-## 13. Controllers (Api/V1)
+## 10. Docker (Unified)
 
-### `AuthController`
+**Image:** `ghcr.io/cellar-backup/cellar:latest`
 
-- `login` — Validates username/password, issues Sanctum plain-text token. Supports login by username or email.
-- `logout` — Revokes current token.
-- `me` — Returns authenticated user.
+Multi-stage build: Node 20 (frontend) → PHP 8.4 (runtime with borg, restic, kubectl, DB clients, nginx, supervisor).
 
-### `SystemController`
+**Volumes:** `/app/data` (SQLite + app key), `/data/repositories` (borg repos).
 
-- `health` — Returns status + version + database/redis connectivity checks.
+**Entrypoint:** creates dirs → persists APP_KEY → creates SQLite → runs migrations → seeds defaults → starts supervisord.
 
-### `RepositoryController`
-
-- Standard CRUD (apiResource).
-- `test` — For local backends: checks `is_dir`, reports disk space. Updates status to online/offline.
-- `import` — Imports an existing Borg repository: validates path, checks for borg `README` file, calls `getRepoInfo()` + `listArchives()` + `getArchiveInfo()` per archive. Creates a Source (type=directory), BackupPlan (schedule_enabled=false), and Archive records. Stores `imported_paths` mapping in repo config. Returns 201 with archive count.
-
-### `SourceController`
-
-- Standard CRUD.
-- `quickAdd` — Creates Source + BackupPlan in one call. Auto-creates default local repository if none exists.
-- `testConnection` — For database sources: runs `pg_isready` (PostgreSQL) or `mysqladmin ping` (MySQL/MariaDB). For filesystem sources (directory/docker_volume/sqlite): validates path with `file_exists()`, `is_dir()`, `is_readable()`.
-
-### `BackupPlanController`
-
-- Standard CRUD with eager-loaded `source` and `repository`.
-- `backup` — Dispatches `RunBackup` job.
-- `restore` — Dispatches `RunRestore` job (requires `archive_id`).
-- `prune` — Dispatches `RunPrune` job (supports `dry_run` flag).
-- `verify` — Dispatches `RunVerify` job (optional `archive_id`).
-
-### `JobController`
-
-- Read-only `index`/`show`. Supports filtering by `plan`, `job_type`, `status`. Paginated (default 25).
-
-### `ArchiveController`
-
-- `index` — Paginated, filterable by `plan`.
-- `show` / `destroy` — Standard.
-- `restore` — Dispatches `RunRestore` job.
-- `download` — Extracts archive to temp dir, converts custom-format dumps to plain SQL, streams as download. Cleanup via `app()->terminating()`.
-
-### `NotificationChannelController`
-
-- Standard CRUD (apiResource).
-
-### `DocumentController`
-
-- Standard CRUD. `test` action is a stub (not yet implemented).
-
-### `KubernetesController`
-
-**Cluster CRUD:**
-
-- `clusters` — List all saved cluster configurations.
-- `storeCluster` — Create a new cluster; accepts kubeconfig file upload (multipart/form-data, max 512KB, encrypted at rest).
-- `updateCluster` — Update cluster name, context, namespace, or replace/clear kubeconfig.
-- `destroyCluster` — Delete a cluster and its associated ignore list.
-
-**Cluster-scoped discovery (all routes prefixed with `clusters/{cluster}`):**
-
-- `test` — Cluster connectivity check via `KubernetesDiscovery::fromCluster()`.
-- `discover` — Runs full discovery scoped to a cluster, filters out ignored resources, annotates `already_added`, updates `last_scanned_at`.
-- `namespaces` — Lists available namespaces in the cluster.
-- `import` — Batch-creates Source records from selected discovered resources.
-- `ignore` — Persists a resource to `RadarIgnore` (scoped to cluster) so it no longer appears in discovery.
-- `ignored` — Lists ignored resources for a cluster.
-- `unignore` — Removes a resource from the ignore list.
-- `listDatabases` — Cluster-scoped (`clusters/{cluster}/list-databases`). Accepts `source_type`, `host`, `port`, `username`, `password`, `pod_name`, `namespace`. Builds `$kubectlContext` (temp kubeconfig, kubectl path, context) from the cluster and passes it to `DatabaseInspector` for kubectl exec fallback.
+**Required env:** `REDIS_HOST` (everything else has sensible defaults).
 
 ---
 
-## 14. Database Migrations
+## 11. Key Design Decisions
 
-**Naming convention:** Migration filenames MUST use the actual creation date as the timestamp prefix: `YYYY_MM_DD_NNNNNN_description.php`, where `NNNNNN` is a zero-padded sequence number for ordering within the same day (e.g., `000001`, `000002`). Never use placeholder dates like `2024_01_01` or future dates. The first 4 migrations (`0001_01_01_*`) are Laravel framework defaults and follow Laravel's own convention.
-
-17 migration files:
-
-1. `0001_01_01_000000_create_users_table.php` — users, password_reset_tokens, sessions
-2. `0001_01_01_000001_create_cache_table.php` — cache, cache_locks
-3. `0001_01_01_000002_create_jobs_table.php` — Laravel queue jobs, job_batches, failed_jobs
-4. `0001_01_01_000003_create_personal_access_tokens_table.php` — Sanctum tokens
-5. `2026_03_03_000001_create_repositories_table.php`
-6. `2026_03_03_000002_create_sources_table.php`
-7. `2026_03_03_000003_create_backup_plans_table.php`
-8. `2026_03_03_000004_create_backup_jobs_table.php`
-9. `2026_03_03_000005_create_archives_table.php`
-10. `2026_03_03_000006_create_notification_channels_table.php`
-11. `2026_03_03_000007_create_custom_documents_table.php`
-12. `2026_03_04_000001_create_radar_ignores_table.php` — K8s Radar ignore list (resource_key unique, namespace, name, kind, source_type, reason)
-13. `2026_03_04_000002_create_radar_clusters_table.php` — K8s cluster configs (name, kubeconfig encrypted, context, default_namespace, is_active, last_scanned_at) + adds cluster_id FK to radar_ignores
-14. `2026_03_05_000001_add_progress_to_backup_jobs_table.php` — progress tracking column
-15. `2026_03_05_000002_add_tags_and_notes_to_archives.php` — tags/notes on archives
-16. `2026_03_05_000003_add_retention_policy_to_sources_table.php` — per-source retention
-17. `2026_03_05_000004_create_profiles_and_settings_tables.php` — reusable profiles + app settings
+1. **Single container** — supervisord manages nginx, PHP, Horizon, Scheduler, Reverb. Simplifies HomeLab deployment.
+2. **SQLite default** — Zero-config. PostgreSQL available as overlay.
+3. **UUID primary keys** — All domain models for portability.
+4. **Encrypted-at-rest** — Repo configs, passwords, kubeconfigs via Laravel `encrypted` casts.
+5. **Borg-first** — `BackupEngine` interface for future restic support, but MVP is BorgBackup only.
+6. **Timezone-aware scheduling** — All cron evaluation uses configured timezone from AppSetting.
+7. **Single WebSocket subscription** — AppSidebar owns the Echo channel; views must NOT subscribe independently.
+8. **Profile-driven defaults** — New sources inherit retention/schedule from default Profile, not hardcoded values.
+9. **kubectl exec for connectivity** — Sources with `dump_method: 'kubectl'` test connectivity via pod exec, matching the backup path.
+10. **Runtime config override** — `AppServiceProvider::boot()` reads DB settings and overrides Horizon config without restart.
 
 ---
 
-## 15. Frontend
+## 12. Database Migrations
 
-### Tech Stack
+**Convention:** Filenames use actual creation date: `YYYY_MM_DD_NNNNNN_description.php`. First 4 are Laravel framework defaults (`0001_01_01_*`).
 
-- **Vue 3.5+**, **Pinia 2.2+**, **Vue Router 4.4+**
-- **Tailwind CSS 4**, **Radix Vue** (headless UI), **Lucide icons**
-- **Axios** for API calls, **Chart.js + vue-chartjs** for charts
-- **TypeScript 5.6+**, **Vite 6**
-- Dev: ESLint 9, Prettier, Vitest, jsdom
-
-### `frontend/src/lib/api.ts` — Axios Instance
-
-```typescript
-const api = axios.create({ baseURL: "/api/v1" });
-// Request: attaches Bearer token from localStorage("cellar_access_token")
-// Response: on 401 → clears session, soft-redirects to /login via router
-```
-
-### `frontend/src/App.vue`
-
-- Public pages (login): full-screen `<RouterView>`
-- Authenticated pages: sidebar (`AppSidebar`) + main content area
-
-### Router — 8 routes
-
-| Path        | Name      | View              | Auth Required |
-| ----------- | --------- | ----------------- | :-----------: |
-| `/login`    | login     | LoginView.vue     |      No       |
-| `/`         | dashboard | DashboardView.vue |      Yes      |
-| `/sources`  | sources   | SourcesView.vue   |      Yes      |
-| `/plans`    | plans     | PlansView.vue     |      Yes      |
-| `/archives` | archives  | ArchivesView.vue  |      Yes      |
-| `/jobs`     | jobs      | JobsView.vue      |      Yes      |
-| `/radar`    | radar     | RadarView.vue     |      Yes      |
-| `/settings` | settings  | SettingsView.vue  |      Yes      |
-
-Auth guard: on first load validates token via `GET /auth/me`; subsequent navigations check in-memory state.
-
-### Pinia Stores
-
-**`auth.ts`** — Token management. Stores `cellar_access_token` and `cellar_user` in localStorage. Methods: `checkAuth()`, `login(username, password)`, `logout()`, `clearSession()`.
-
-**`plans.ts`** — Manages BackupPlan[], Job[], Archive[]. Methods: `fetchPlans()`, `fetchJobs()`, `fetchArchives()`, `triggerBackup(planId)`, `triggerPrune(planId)`, `triggerVerify(planId)`, `triggerRestore(archiveId)`, `downloadArchive(archiveId)`.
-
-**`sources.ts`** — Manages Source[]. Methods: `fetchSources()`, `quickAdd(payload)`, `getSource(id)`, `updateSource(id, payload)`, `testConnection(id)`, `deleteSource(id)`.
-
-**`radar.ts`** — Manages multi-cluster K8s Radar state. Types: `ResourceEndpoint` (kind, resource_name, host, port, external fields, image), `DiscoveredCredential` (secret_name, key, value), `DiscoveredResource` (includes `endpoints[]` and `credentials[]`), `ImportOverride` (per-resource host/port/username/password/database_name overrides). Tracks saved clusters, active cluster selection, discovered resources, ignored list. Cluster CRUD: `fetchClusters()`, `createCluster(name, kubeconfigFile?, context?, defaultNamespace?)`, `updateCluster(...)`, `deleteCluster(id)`, `selectCluster(id)`. Discovery (cluster-scoped): `testConnection()`, `discover()`, `importResources(selected, overrides?)`, `ignoreResource(resource, reason?)`, `fetchIgnored()`, `unignore(id)`. Database inspection: `listDatabases(sourceType, host, port, username?, password?, podName?, podNamespace?)` — calls cluster-scoped endpoint, passes pod info for kubectl exec targeting. Uses `FormData` with multipart upload for kubeconfig files.
-
-### Views (9 files)
-
-`ArchivesView.vue`, `DashboardView.vue`, `JobsView.vue`, `LoginView.vue`, `LogsView.vue`, `PlansView.vue`, `RadarView.vue`, `SettingsView.vue`, `SourcesView.vue`
-
-#### Notable View Features
-
-- **SourcesView** — Wizard supports two categories: Databases (PostgreSQL, MySQL, MariaDB, MongoDB, Redis) and Filesystem (Directory, Docker Volume). Step 2 form fields adapt based on category.
-- **PlansView** — Includes "Import Borg Repo" modal for importing existing Borg repositories into Cellar.
-- **RadarView** — Multi-cluster K8s discovery UI: cluster selector bar with add/edit/delete, kubeconfig file upload modal, per-cluster scan with namespace filter, scan results as selectable list with Pod/Service endpoint toggle (clickable badges showing service type: LB/NP/CIP/Ext), external access badges and hints, Secret credential badge. Import review modal with endpoint selector (shows each endpoint’s K8s resource name + type), editable host/port, auto-filled username/password from discovered Secrets, “Detect databases” button that queries the actual DB server and shows selectable database chips. Bulk import, per-resource ignore with “Ignored” panel toggle.
-
----
-
-## 16. Docker
-
-### `Dockerfile.api`
-
-- Base: `php:8.4-cli`
-- Installs: borgbackup, restic, postgresql-client, default-mysql-client, supervisor, cron, kubectl
-- PHP extensions: pdo, pdo_mysql, pdo_pgsql, pdo_sqlite, zip, pcntl, bcmath, redis (PECL)
-- Runs Composer install, copies backend code, creates data dirs
-- Entrypoint: `docker/entrypoint.sh`
-- Default CMD: `php artisan serve --host=0.0.0.0 --port=8000`
-
-### `Dockerfile.ui`
-
-- Build stage: `node:20-alpine`, `npm ci`, `npm run build`
-- Production stage: `nginx:alpine`, serves `/app/dist` with `nginx.conf`
-
-### `entrypoint.sh`
-
-1. Creates data directories
-2. Copies `.env.docker` → `.env` (if exists)
-3. Persists `APP_KEY` across container rebuilds (stored in `/app/data/.app_key`)
-4. Creates SQLite file if missing
-5. Runs `php artisan migrate --force`
-6. Runs `php artisan cellar:seed-defaults`
-7. Execs into main process
-
-### `Caddyfile`
-
-Listens on `:8420`. Routes:
-
-- `/api/*` → `cellar-api:8000`
-- `/horizon/*` → `cellar-api:8000`
-- `/sanctum/*` → `cellar-api:8000`
-- Everything else → `cellar-ui:80` (SPA catch-all)
-
-### `nginx.conf`
-
-SPA fallback (`try_files $uri $uri/ /index.html`), API proxy to `cellar-api:8000`, WebSocket proxy at `/ws/`, static asset caching (1 year).
-
-### `docker-compose.postgres.yml` (override)
-
-Adds `cellar-db` (PostgreSQL 16), overrides API/worker/scheduler envs with `CELLAR_DB_*` variables.
-
----
-
-## 17. Makefile
-
-```makefile
-up          # docker compose up -d
-down        # docker compose down
-build       # docker compose build
-logs        # docker compose logs -f
-shell       # exec bash in cellar-api
-frontend-shell  # exec sh in cellar-ui
-migrate     # artisan migrate
-artisan     # artisan $(CMD) — e.g., make artisan CMD="route:list"
-seed        # artisan cellar:seed-defaults
-tinker      # artisan tinker
-horizon-status  # artisan horizon:status
-lint        # frontend npm run lint
-format      # frontend npm run format
-typecheck   # frontend npm run type-check
-test        # backend + frontend tests
-test-backend    # artisan test only
-test-frontend   # npm run test only
-clean       # remove node_modules + dist + vendor
-```
-
----
-
-## 18. Key Design Decisions
-
-1. **SQLite default** — Zero-config for HomeLab. PostgreSQL available as overlay.
-2. **UUID primary keys** — All domain models use `HasUuids` for portability.
-3. **Encrypted-at-rest** — Repository configs and source passwords use Laravel's `encrypted` / `encrypted:array` casts.
-4. **Sanctum token auth** — Stateless Bearer tokens stored in frontend localStorage.
-5. **Horizon for queues** — Redis-backed with dashboard at `/horizon`.
-6. **Borg-first** — `BackupEngine` interface allows future engines (restic), but MVP implements BorgBackup only.
-7. **Custom backup documents** — Extensibility via user-defined backup/restore shell commands.
-8. **Schedule per plan** — Each `BackupPlan` has its own cron expression, evaluated every minute by the scheduler.
-9. **Auto-pruning** — Prune runs 30 minutes after each scheduled backup.
-10. **Caddy reverse proxy** — Handles routing between SPA and API, with admin-off for minimal footprint.
-11. **Borg repo import** — Importing creates an anchor Source (type=directory) + BackupPlan (schedule_enabled=false) to satisfy FK constraints, then creates Archive records for each discovered archive. Stored `imported_paths` mapping in repo config for traceability.
-12. **Kubernetes Radar** — Uses kubectl CLI (not client-go) via Laravel Process facade for simplicity. Supports multiple saved cluster configurations with kubeconfig file upload (encrypted at rest via Laravel's `encrypted` cast) or in-cluster ServiceAccount auto-detect. Ignore list persisted in `radar_ignores` table (scoped per cluster) to prevent rediscovery noise. Temp kubeconfig files written on-demand and cleaned up in `__destruct`.
-13. **Non-database sources** — Frontend wizard split into Database/Filesystem categories. Backend `testConnection()` validates filesystem paths instead of rejecting non-DB types.
+18 migration files covering: users, cache, queue, Sanctum tokens, repositories, sources, backup_plans, backup_jobs, archives, notification_channels, custom_documents, radar_ignores, radar_clusters, job progress, archive tags/notes, source retention, profiles + app_settings, source health fields.
