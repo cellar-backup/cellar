@@ -187,11 +187,12 @@ make tinker      # Open Laravel Tinker REPL
 
 ## Roadmap
 
-| Phase          | Version   | Focus                                                          |
-| -------------- | --------- | -------------------------------------------------------------- |
-| **Foundation** | v0.1–v0.3 | Core backup/restore, Borg engine, local + S3, basic UI         |
-| **Expansion**  | v0.4–v0.7 | Custom documents, restore wizard, multi-backend, notifications |
-| **Polish**     | v0.8–v1.0 | Multi-user RBAC, audit log, metrics, mobile views, v1.0 launch |
+| Phase          | Version   | Status | Focus                                                          |
+| -------------- | --------- | ------ | -------------------------------------------------------------- |
+| **Foundation** | v0.1–v0.3 | Done   | Core backup/restore, Borg engine, local repos, basic UI        |
+| **Expansion**  | v0.4–v0.7 | Done   | Real-time WebSocket UI, database dumpers, retention policies, profiles, setup wizard |
+| **Polish**     | v0.8      | Now    | Timezone-aware scheduling, source health checks, kubectl connectivity, default profiles, system settings |
+| **Release**    | v0.9–v1.0 | Next   | Multi-user RBAC, audit log, notifications, restic engine, metrics dashboard, mobile views, v1.0 launch |
 
 ## License
 
