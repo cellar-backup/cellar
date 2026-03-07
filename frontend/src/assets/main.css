@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/*
+ * Cellar Design Tokens
+ * Dark Cellar (default) + Light Cellar themes
+ */
+
+@theme {
+  /* Dark theme (default) */
+  --color-background: #0a0a0f;
+  --color-surface: #141419;
+  --color-surface-raised: #1c1c24;
+  --color-primary: #6c5ce7;
+  --color-success: #00d68f;
+  --color-warning: #f7b731;
+  --color-danger: #ff4757;
+  --color-info: #3b82f6;
+  --color-text-primary: #e4e4e7;
+  --color-text-muted: #71717a;
+  --color-border: #27272a;
+}
+
+/* Typography */
+@layer base {
+  body {
+    font-family:
+      "Inter",
+      "Geist Sans",
+      system-ui,
+      -apple-system,
+      sans-serif;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
+}

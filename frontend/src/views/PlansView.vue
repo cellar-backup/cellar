@@ -1,0 +1,733 @@
+<script setup lang="ts">
+import { onMounted, onUnmounted, ref, nextTick } from "vue";
+import { usePlansStore } from "@/stores/plans";
+import { useConfirm } from "@/composables/useConfirm";
+import {
+  Play,
+  Scissors,
+  ShieldCheck,
+  CircleCheck,
+  CircleX,
+  Clock,
+  Loader2,
+  Import,
+  Square,
+  FileText,
+  X,
+} from "lucide-vue-next";
+
+const store = usePlansStore();
+const { confirm } = useConfirm();
+
+// Live elapsed time ticker
+const now = ref(Date.now());
+let tickTimer: ReturnType<typeof setInterval> | null = null;
+
+onMounted(() => {
+  store.fetchPlans();
+  tickTimer = setInterval(() => {
+    now.value = Date.now();
+  }, 1000);
+});
+
+onUnmounted(() => {
+  if (tickTimer) {
+    clearInterval(tickTimer);
+    tickTimer = null;
+  }
+  stopLogPolling();
+});
+
+function elapsed(startedAt: string | null) {
+  if (!startedAt) return "";
+  const ms = now.value - new Date(startedAt).getTime();
+  const secs = Math.max(0, Math.round(ms / 1000));
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  const rem = secs % 60;
+  return `${mins}m ${rem}s`;
+}
+
+// ---- Action state ----
+const actionLoading = ref<string | null>(null);
+const actionMessage = ref<{ planId: string; text: string; ok: boolean } | null>(
+  null,
+);
+
+async function runBackup(planId: string) {
+  actionLoading.value = planId;
+  actionMessage.value = null;
+  try {
+    const data = await store.triggerBackup(planId);
+    actionMessage.value = { planId, text: data.detail, ok: true };
+  } catch {
+    actionMessage.value = {
+      planId,
+      text: "Failed to trigger backup.",
+      ok: false,
+    };
+  } finally {
+    actionLoading.value = null;
+  }
+}
+
+async function runPrune(planId: string) {
+  actionLoading.value = planId;
+  actionMessage.value = null;
+  try {
+    const data = await store.triggerPrune(planId);
+    actionMessage.value = { planId, text: data.detail, ok: true };
+  } catch {
+    actionMessage.value = {
+      planId,
+      text: "Failed to trigger prune.",
+      ok: false,
+    };
+  } finally {
+    actionLoading.value = null;
+  }
+}
+
+async function runVerify(planId: string) {
+  actionLoading.value = planId;
+  actionMessage.value = null;
+  try {
+    const data = await store.triggerVerify(planId);
+    actionMessage.value = { planId, text: data.detail, ok: true };
+  } catch {
+    actionMessage.value = {
+      planId,
+      text: "Failed to trigger verify.",
+      ok: false,
+    };
+  } finally {
+    actionLoading.value = null;
+  }
+}
+
+async function cancelRunning(planId: string, jobId: string) {
+  if (
+    !(await confirm({
+      title: "Cancel Job",
+      message: "Cancel the running job? This action cannot be undone.",
+      confirmLabel: "Cancel Job",
+      variant: "warning",
+    }))
+  )
+    return;
+  actionLoading.value = planId;
+  actionMessage.value = null;
+  try {
+    await store.cancelJob(jobId);
+    actionMessage.value = { planId, text: "Job cancelled.", ok: true };
+  } catch {
+    actionMessage.value = {
+      planId,
+      text: "Failed to cancel job.",
+      ok: false,
+    };
+  } finally {
+    actionLoading.value = null;
+  }
+}
+
+// ---- Log viewer ----
+const showLog = ref(false);
+const logContent = ref<string | null>(null);
+const logLoading = ref(false);
+const logJobId = ref<string | null>(null);
+const logJobLabel = ref("");
+const logJobRunning = ref(false);
+const logScrollArea = ref<HTMLElement | null>(null);
+let logPollTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopLogPolling() {
+  if (logPollTimer) {
+    clearInterval(logPollTimer);
+    logPollTimer = null;
+  }
+}
+
+function scrollLogToBottom() {
+  nextTick(() => {
+    if (logScrollArea.value) {
+      logScrollArea.value.scrollTop = logScrollArea.value.scrollHeight;
+    }
+  });
+}
+
+async function fetchLogContent() {
+  if (!logJobId.value) return;
+  try {
+    const result = await store.fetchJobLog(logJobId.value);
+    if (result.content !== null) {
+      const wasAtBottom =
+        logScrollArea.value &&
+        logScrollArea.value.scrollHeight -
+          logScrollArea.value.scrollTop -
+          logScrollArea.value.clientHeight <
+          50;
+      logContent.value = result.content;
+      if (wasAtBottom || logLoading.value) {
+        scrollLogToBottom();
+      }
+    } else if (!logContent.value) {
+      logContent.value = null;
+    }
+  } catch {
+    if (!logContent.value) {
+      logContent.value = "Failed to load log.";
+    }
+  }
+}
+
+async function openLog(jobId: string, label: string, isRunning: boolean) {
+  logJobId.value = jobId;
+  logJobLabel.value = label;
+  logJobRunning.value = isRunning;
+  logContent.value = null;
+  logLoading.value = true;
+  showLog.value = true;
+  stopLogPolling();
+
+  await fetchLogContent();
+  logLoading.value = false;
+
+  if (isRunning) {
+    logPollTimer = setInterval(async () => {
+      await fetchLogContent();
+      const plan = store.plans.find((p) => p.running_job?.id === jobId);
+      if (!plan) {
+        logJobRunning.value = false;
+        stopLogPolling();
+        await fetchLogContent();
+      }
+    }, 2000);
+  }
+}
+
+function closeLog() {
+  showLog.value = false;
+  logContent.value = null;
+  logJobId.value = null;
+  logJobRunning.value = false;
+  stopLogPolling();
+}
+
+function statusBadgeClass(status: string) {
+  switch (status) {
+    case "healthy":
+      return "bg-success/10 text-success";
+    case "failed":
+      return "bg-danger/10 text-danger";
+    case "running":
+      return "bg-info/10 text-info";
+    case "warning":
+      return "bg-warning/10 text-warning";
+    default:
+      return "bg-surface-raised text-text-muted";
+  }
+}
+
+function statusIcon(status: string) {
+  switch (status) {
+    case "healthy":
+      return CircleCheck;
+    case "failed":
+      return CircleX;
+    case "running":
+      return Loader2;
+    default:
+      return Clock;
+  }
+}
+
+function timeAgo(dateStr: string | null) {
+  if (!dateStr) return "never";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+// ---- Import repository modal ----
+const showImport = ref(false);
+const importLoading = ref(false);
+const importError = ref("");
+const importResult = ref<{
+  message: string;
+  archiveCount: number;
+} | null>(null);
+
+const importForm = ref({
+  path: "",
+  name: "",
+  repositoryId: "",
+});
+
+async function openImport() {
+  showImport.value = true;
+  importError.value = "";
+  importResult.value = null;
+  importForm.value = { path: "", name: "", repositoryId: "" };
+  // Fetch repositories for the dropdown
+  await store.fetchRepositories();
+  // Auto-select default repo if available
+  if (store.repositories.length > 0 && !importForm.value.repositoryId) {
+    importForm.value.repositoryId = store.repositories[0].id;
+  }
+}
+
+async function submitImport() {
+  importLoading.value = true;
+  importError.value = "";
+  try {
+    const result = await store.importRepository(
+      importForm.value.repositoryId,
+      importForm.value.path,
+      importForm.value.name || undefined,
+    );
+    importResult.value = {
+      message: result.message,
+      archiveCount: result.archive_count,
+    };
+  } catch (e: unknown) {
+    if (e && typeof e === "object" && "response" in e) {
+      const resp = (e as { response: { data: { message?: string } } }).response;
+      importError.value = resp.data?.message ?? "Failed to import repository.";
+    } else {
+      importError.value = "Failed to import repository.";
+    }
+  } finally {
+    importLoading.value = false;
+  }
+}
+
+function closeImport() {
+  showImport.value = false;
+}
+</script>
+
+<template>
+  <div class="p-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold text-text-primary">Backup Plans</h1>
+        <p class="mt-1 text-text-muted">
+          Manage schedules, trigger backups, and monitor status.
+        </p>
+      </div>
+      <button
+        class="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-muted hover:bg-surface-raised hover:text-text-primary transition-colors"
+        @click="openImport"
+      >
+        <Import class="h-4 w-4" />
+        Import Borg Repo
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div v-if="store.loading" class="mt-8 text-text-muted">Loading plans…</div>
+
+    <!-- Empty state -->
+    <div
+      v-else-if="store.plans.length === 0"
+      class="mt-8 rounded-xl border border-dashed border-border p-12 text-center"
+    >
+      <p class="text-text-muted">No backup plans yet.</p>
+      <p class="mt-1 text-sm text-text-muted">
+        Add a source to automatically create a backup plan.
+      </p>
+    </div>
+
+    <!-- Plan list -->
+    <TransitionGroup v-else name="plan-list" tag="div" class="mt-6 space-y-4">
+      <div
+        v-for="plan in store.plans"
+        :key="plan.id"
+        class="rounded-xl border border-border bg-surface p-5 transition-all duration-300"
+      >
+        <div class="flex items-start justify-between">
+          <div class="flex items-center gap-3">
+            <component
+              :is="statusIcon(plan.status)"
+              class="h-5 w-5"
+              :class="{
+                'text-success': plan.status === 'healthy',
+                'text-danger': plan.status === 'failed',
+                'text-info animate-spin': plan.status === 'running',
+                'text-text-muted':
+                  plan.status === 'idle' || plan.status === 'warning',
+              }"
+            />
+            <div>
+              <h3 class="font-medium text-text-primary">{{ plan.name }}</h3>
+              <p class="mt-0.5 text-sm text-text-muted">
+                {{ plan.source_type }} · {{ plan.engine }} ·
+                <span class="font-mono">{{ plan.schedule_cron }}</span>
+              </p>
+            </div>
+          </div>
+
+          <span
+            class="rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors duration-300"
+            :class="statusBadgeClass(plan.status)"
+          >
+            {{ plan.status }}
+          </span>
+        </div>
+
+        <!-- Meta row -->
+        <div class="mt-3 flex items-center gap-6 text-xs text-text-muted">
+          <span>Repository: {{ plan.repository_name }}</span>
+          <span>Last run: {{ timeAgo(plan.last_run) }}</span>
+          <span v-if="plan.schedule_enabled" class="text-success">
+            Scheduled
+          </span>
+          <span v-else class="text-warning"> Paused </span>
+        </div>
+
+        <!-- Progress bar (running jobs) -->
+        <Transition name="progress-slide">
+          <div v-if="plan.running_job" class="mt-3 space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-info font-medium capitalize">
+                {{ plan.running_job.job_type }} in progress…
+              </span>
+              <span class="text-text-muted tabular-nums">
+                {{ plan.running_job.progress ?? 0 }}% ·
+                {{ elapsed(plan.running_job.started_at) }}
+              </span>
+            </div>
+            <div class="h-1.5 w-full overflow-hidden rounded-full bg-info/10">
+              <div
+                class="h-full rounded-full bg-info transition-all duration-700 ease-out"
+                :style="{
+                  width: Math.max(plan.running_job.progress ?? 0, 2) + '%',
+                }"
+              />
+            </div>
+            <div
+              v-if="plan.running_job.id !== '_pending'"
+              class="flex items-center gap-2"
+            >
+              <button
+                class="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors"
+                @click="
+                  openLog(
+                    plan.running_job?.id ?? '',
+                    (plan.running_job?.job_type ?? '') + ' — ' + plan.name,
+                    true,
+                  )
+                "
+              >
+                <FileText class="h-3 w-3" /> View Log
+              </button>
+            </div>
+          </div>
+        </Transition>
+
+        <!-- Action message -->
+        <Transition name="progress-slide">
+          <div
+            v-if="actionMessage?.planId === plan.id"
+            class="mt-3 rounded-lg px-3 py-2 text-sm"
+            :class="
+              actionMessage.ok
+                ? 'bg-success/10 text-success'
+                : 'bg-danger/10 text-danger'
+            "
+          >
+            {{ actionMessage.text }}
+          </div>
+        </Transition>
+
+        <!-- Actions -->
+        <div class="mt-4 flex items-center gap-2">
+          <button
+            :disabled="actionLoading === plan.id"
+            class="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
+            @click="runBackup(plan.id)"
+          >
+            <Play class="h-3.5 w-3.5" />
+            Run Backup
+          </button>
+          <button
+            :disabled="actionLoading === plan.id"
+            class="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-raised transition-colors disabled:opacity-50"
+            @click="runPrune(plan.id)"
+          >
+            <Scissors class="h-3.5 w-3.5" />
+            Prune
+          </button>
+          <button
+            :disabled="actionLoading === plan.id"
+            class="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-raised transition-colors disabled:opacity-50"
+            @click="runVerify(plan.id)"
+          >
+            <ShieldCheck class="h-3.5 w-3.5" />
+            Verify
+          </button>
+
+          <Loader2
+            v-if="actionLoading === plan.id"
+            class="ml-2 h-4 w-4 animate-spin text-text-muted"
+          />
+
+          <button
+            v-if="plan.running_job && plan.running_job.id !== '_pending'"
+            :disabled="actionLoading === plan.id"
+            class="ml-auto flex items-center gap-1.5 rounded-lg border border-danger/30 px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
+            @click="cancelRunning(plan.id, plan.running_job.id)"
+          >
+            <Square class="h-3 w-3 fill-current" />
+            Cancel
+          </button>
+        </div>
+      </div>
+    </TransitionGroup>
+
+    <!-- ======== Import Borg Repo Modal ======== -->
+    <Teleport to="body">
+      <div
+        v-if="showImport"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        @click.self="closeImport"
+      >
+        <div
+          class="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-xl"
+        >
+          <!-- Success state -->
+          <template v-if="importResult">
+            <div class="text-center py-4">
+              <CircleCheck class="mx-auto h-14 w-14 text-success" />
+              <h2 class="mt-4 text-lg font-semibold text-text-primary">
+                Repository Imported!
+              </h2>
+              <p class="mt-2 text-sm text-text-muted">
+                {{ importResult.message }}
+              </p>
+              <div
+                class="mt-4 rounded-lg bg-surface-raised px-4 py-3 text-sm text-text-primary"
+              >
+                <span class="text-text-muted">Archives imported:</span>
+                {{ importResult.archiveCount }}
+              </div>
+              <button
+                class="mt-6 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
+                @click="closeImport"
+              >
+                Done
+              </button>
+            </div>
+          </template>
+
+          <!-- Import form -->
+          <template v-else>
+            <div class="flex items-center gap-3 mb-5">
+              <div
+                class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary"
+              >
+                <Import class="h-5 w-5" />
+              </div>
+              <div>
+                <h2 class="text-lg font-semibold text-text-primary">
+                  Import Borg Repository
+                </h2>
+                <p class="text-sm text-text-muted">
+                  Point to an existing borg repo to import its archives.
+                </p>
+              </div>
+            </div>
+
+            <form class="space-y-4" @submit.prevent="submitImport">
+              <!-- Target repository -->
+              <div>
+                <label class="mb-1 block text-sm font-medium text-text-primary">
+                  Target Repository
+                </label>
+                <select
+                  v-model="importForm.repositoryId"
+                  required
+                  class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="" disabled>Select a repository…</option>
+                  <option
+                    v-for="repo in store.repositories"
+                    :key="repo.id"
+                    :value="repo.id"
+                  >
+                    {{ repo.name }} ({{ repo.backend_type }})
+                  </option>
+                </select>
+              </div>
+
+              <!-- Borg repo path -->
+              <div>
+                <label class="mb-1 block text-sm font-medium text-text-primary">
+                  Borg Repository Path
+                </label>
+                <input
+                  v-model="importForm.path"
+                  type="text"
+                  required
+                  placeholder="/data/repositories/my-existing-repo"
+                  class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <p class="mt-1 text-xs text-text-muted">
+                  Path to an existing borg repository on the container
+                  filesystem.
+                </p>
+              </div>
+
+              <!-- Name (optional) -->
+              <div>
+                <label class="mb-1 block text-sm font-medium text-text-primary">
+                  Name
+                  <span class="font-normal text-text-muted">(optional)</span>
+                </label>
+                <input
+                  v-model="importForm.name"
+                  type="text"
+                  placeholder="Auto-generated from path"
+                  class="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <!-- Error -->
+              <div
+                v-if="importError"
+                class="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger"
+              >
+                {{ importError }}
+              </div>
+
+              <!-- Actions -->
+              <div class="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  class="rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-muted hover:bg-surface-raised transition-colors"
+                  @click="closeImport"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  :disabled="importLoading"
+                  class="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  <Loader2 v-if="importLoading" class="h-4 w-4 animate-spin" />
+                  {{ importLoading ? "Importing…" : "Import Repository" }}
+                </button>
+              </div>
+            </form>
+          </template>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ======== Log Viewer Modal ======== -->
+    <Teleport to="body">
+      <div
+        v-if="showLog"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        @click.self="closeLog"
+      >
+        <div
+          class="w-full max-w-3xl max-h-[80vh] flex flex-col rounded-2xl border border-border bg-surface shadow-xl"
+        >
+          <div
+            class="flex items-center justify-between border-b border-border px-6 py-4"
+          >
+            <div class="flex items-center gap-3">
+              <FileText class="h-5 w-5 text-text-muted" />
+              <div>
+                <h2 class="text-sm font-semibold text-text-primary">Job Log</h2>
+                <p class="text-xs text-text-muted">{{ logJobLabel }}</p>
+              </div>
+            </div>
+            <button
+              class="rounded-lg p-1 text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors"
+              @click="closeLog"
+            >
+              <X class="h-5 w-5" />
+            </button>
+          </div>
+          <div ref="logScrollArea" class="flex-1 overflow-auto p-6">
+            <div
+              v-if="logLoading"
+              class="flex items-center gap-2 text-text-muted"
+            >
+              <Loader2 class="h-4 w-4 animate-spin" />
+              Loading log&hellip;
+            </div>
+            <pre
+              v-else-if="logContent"
+              class="whitespace-pre-wrap break-words text-xs font-mono leading-relaxed text-text-primary bg-surface-raised rounded-lg p-4 max-h-[60vh] overflow-auto"
+              >{{ logContent }}</pre
+            >
+            <p v-else class="text-sm text-text-muted">
+              No log available for this job yet.
+            </p>
+            <div
+              v-if="logJobRunning && !logLoading"
+              class="mt-3 flex items-center gap-2 text-xs text-info"
+            >
+              <Loader2 class="h-3.5 w-3.5 animate-spin" />
+              Live &mdash; updating every 2 seconds
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+  </div>
+</template>
+
+<style scoped>
+/* Plan list enter/leave */
+.plan-list-enter-active,
+.plan-list-leave-active {
+  transition: all 0.35s ease;
+}
+.plan-list-enter-from {
+  opacity: 0;
+  transform: translateY(-12px);
+}
+.plan-list-leave-to {
+  opacity: 0;
+  transform: translateY(12px);
+}
+.plan-list-move {
+  transition: transform 0.35s ease;
+}
+
+/* Progress bar slide in/out */
+.progress-slide-enter-active {
+  transition: all 0.35s ease-out;
+}
+.progress-slide-leave-active {
+  transition: all 0.25s ease-in;
+}
+.progress-slide-enter-from {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  transform: translateY(-6px);
+}
+.progress-slide-enter-to,
+.progress-slide-leave-from {
+  opacity: 1;
+  max-height: 60px;
+}
+.progress-slide-leave-to {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  transform: translateY(-6px);
+}
+</style>

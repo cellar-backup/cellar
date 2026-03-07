@@ -1,0 +1,36 @@
+{
+  admin off
+}
+
+:8420 {
+  # API proxy (must be before the SPA catch-all)
+  handle /api/* {
+    reverse_proxy cellar-api:8000
+  }
+
+  # Horizon dashboard
+  handle /horizon/* {
+    reverse_proxy cellar-api:8000
+  }
+
+  # Sanctum CSRF cookie
+  handle /sanctum/* {
+    reverse_proxy cellar-api:8000
+  }
+
+  # Reverb WebSocket (Pusher protocol)
+  handle /app/* {
+    reverse_proxy cellar-reverb:8080
+  }
+
+  # Frontend SPA (catch-all — must be last)
+  handle {
+    reverse_proxy cellar-ui:80
+  }
+
+  # Logs
+  log {
+    output stdout
+    format console
+  }
+}
