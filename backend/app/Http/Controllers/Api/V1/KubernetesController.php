@@ -192,9 +192,22 @@ class KubernetesController extends Controller
             ->pluck('resource_key')
             ->toArray();
 
-        // Load existing sources to mark already-added resources
+        // Load existing sources to mark already-added resources.
+        // For database sources, dedup at the (host, database_name) level so
+        // the same pod can have some databases imported and others still available.
         $existingSources = Source::all();
-        $existingHosts = $existingSources->pluck('host')->filter()->map(fn ($h) => strtolower($h))->toArray();
+
+        // Build a map: lowercase(host) → [database_name, ...]
+        $hostDbMap = [];
+        foreach ($existingSources as $src) {
+            $h = strtolower($src->host ?? '');
+            if ($h === '') {
+                continue;
+            }
+            $hostDbMap[$h][] = $src->database_name ?? '';
+        }
+
+        $databaseTypes = ['postgresql', 'mysql', 'mariadb', 'mongodb'];
 
         // Filter & annotate
         $filtered = [];
@@ -205,15 +218,36 @@ class KubernetesController extends Controller
                 continue;
             }
 
-            $r['already_added'] = false;
+            // Collect all hosts for this resource (main + endpoints)
             $hostsToCheck = [strtolower($r['host'] ?? '')];
             foreach ($r['endpoints'] ?? [] as $ep) {
                 $hostsToCheck[] = strtolower($ep['host'] ?? '');
             }
-            foreach ($hostsToCheck as $h) {
-                if ($h && in_array($h, $existingHosts)) {
-                    $r['already_added'] = true;
-                    break;
+            $hostsToCheck = array_filter(array_unique($hostsToCheck));
+
+            $isDatabase = in_array($r['source_type'], $databaseTypes);
+
+            if ($isDatabase) {
+                // Database resources: find which databases on this host are already imported
+                $addedDbs = [];
+                foreach ($hostsToCheck as $h) {
+                    foreach ($hostDbMap[$h] ?? [] as $dbName) {
+                        if ($dbName !== '') {
+                            $addedDbs[] = $dbName;
+                        }
+                    }
+                }
+                $r['already_added'] = false;
+                $r['already_added_databases'] = array_values(array_unique($addedDbs));
+            } else {
+                // Non-database resources (directories, etc.): host-level dedup
+                $r['already_added'] = false;
+                $r['already_added_databases'] = [];
+                foreach ($hostsToCheck as $h) {
+                    if (isset($hostDbMap[$h])) {
+                        $r['already_added'] = true;
+                        break;
+                    }
                 }
             }
 

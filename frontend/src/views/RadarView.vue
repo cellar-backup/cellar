@@ -287,10 +287,16 @@ async function detectDatabases(item: (typeof importReviewItems.value)[0]) {
     item.dbDetectError = result.error;
     item.detectedDatabases = [];
   } else {
-    item.detectedDatabases = result.databases;
-    // Auto-select all detected databases (user can deselect)
-    if (item.database_names.length === 0 && result.databases.length > 0) {
-      item.database_names = [...result.databases];
+    // Filter out databases that are already imported as sources
+    const alreadyImported = new Set(
+      item.resource.already_added_databases?.map((d) => d.toLowerCase()) ?? [],
+    );
+    item.detectedDatabases = result.databases.filter(
+      (db) => !alreadyImported.has(db.toLowerCase()),
+    );
+    // Auto-select all available (non-imported) databases
+    if (item.database_names.length === 0 && item.detectedDatabases.length > 0) {
+      item.database_names = [...item.detectedDatabases];
     }
   }
 }
@@ -1234,6 +1240,16 @@ onMounted(() => {
                 class="rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success"
               >
                 Already added
+              </span>
+              <span
+                v-else-if="resource.already_added_databases?.length"
+                class="rounded-full bg-info/10 px-2 py-0.5 text-xs font-medium text-info"
+                :title="resource.already_added_databases.join(', ')"
+              >
+                {{ resource.already_added_databases.length }} db{{
+                  resource.already_added_databases.length > 1 ? "s" : ""
+                }}
+                imported
               </span>
               <span
                 v-if="

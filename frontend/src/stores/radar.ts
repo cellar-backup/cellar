@@ -48,6 +48,7 @@ export interface DiscoveredResource {
   capacity?: string;
   labels: Record<string, string>;
   already_added: boolean;
+  already_added_databases: string[];
   resource_key: string;
 }
 
