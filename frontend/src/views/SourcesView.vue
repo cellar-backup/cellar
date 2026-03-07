@@ -37,7 +37,6 @@ import {
   type SourceArchive,
 } from "@/stores/sources";
 import { usePlansStore } from "@/stores/plans";
-import { useJobsChannel } from "@/composables/useJobsChannel";
 import { useConfirm } from "@/composables/useConfirm";
 
 const DB_TYPES = [
@@ -62,7 +61,6 @@ const ALL_TYPES = [...DB_TYPES, ...FS_TYPES];
 const store = useSourcesStore();
 const plansStore = usePlansStore();
 const { confirm } = useConfirm();
-useJobsChannel();
 onMounted(() => {
   store.fetchSources();
 });

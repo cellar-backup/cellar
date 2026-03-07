@@ -2,7 +2,6 @@
 import { onMounted, onUnmounted, ref } from "vue";
 import { usePlansStore, type Job } from "@/stores/plans";
 import { useSourcesStore } from "@/stores/sources";
-import { useJobsChannel } from "@/composables/useJobsChannel";
 import { useConfirm } from "@/composables/useConfirm";
 import { useRoute, useRouter } from "vue-router";
 import JobLogModal from "@/components/JobLogModal.vue";
@@ -18,7 +17,6 @@ import {
 const store = usePlansStore();
 const sourcesStore = useSourcesStore();
 const { confirm } = useConfirm();
-useJobsChannel();
 
 // Live elapsed time ticker
 const now = ref(Date.now());

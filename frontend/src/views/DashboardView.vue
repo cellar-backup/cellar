@@ -3,7 +3,6 @@ import { onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
 import { useSourcesStore } from "@/stores/sources";
 import { usePlansStore } from "@/stores/plans";
-import { useJobsChannel } from "@/composables/useJobsChannel";
 import { formatBytes } from "@/lib/utils";
 import {
   Database,
@@ -19,7 +18,6 @@ import {
 const router = useRouter();
 const sourcesStore = useSourcesStore();
 const plansStore = usePlansStore();
-useJobsChannel();
 
 onMounted(() => {
   sourcesStore.fetchSources();

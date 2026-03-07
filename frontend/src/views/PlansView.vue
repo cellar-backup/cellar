@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, nextTick } from "vue";
 import { usePlansStore } from "@/stores/plans";
-import { useJobsChannel } from "@/composables/useJobsChannel";
 import { useConfirm } from "@/composables/useConfirm";
 import {
   Play,
@@ -19,7 +18,6 @@ import {
 
 const store = usePlansStore();
 const { confirm } = useConfirm();
-useJobsChannel();
 
 // Live elapsed time ticker
 const now = ref(Date.now());
