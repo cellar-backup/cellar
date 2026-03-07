@@ -60,9 +60,10 @@ class Source extends Model
                 $source->name = $source->generateName();
             }
 
-            // Auto-fill default retention policy
+            // Auto-fill default retention policy from default profile or hardcoded fallback
             if (empty($source->retention_policy)) {
-                $source->retention_policy = [
+                $defaultProfile = Profile::defaultRetention();
+                $source->retention_policy = $defaultProfile?->config ?? [
                     'keep_daily' => 7,
                     'keep_weekly' => 4,
                     'keep_monthly' => 6,

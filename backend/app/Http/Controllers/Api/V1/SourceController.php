@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Archive;
 use App\Models\BackupPlan;
 use App\Models\Job;
+use App\Models\Profile;
 use App\Models\Repository;
 use App\Models\Source;
 use Illuminate\Http\JsonResponse;
@@ -128,8 +129,16 @@ class SourceController extends Controller
             'schedule' => 'nullable|string|max:100',
         ]);
 
-        $schedule = $data['schedule'] ?? '0 2 * * *';
+        // Use default profiles if no explicit values provided
+        $defaultSchedule = Profile::defaultSchedule();
+        $defaultRetention = Profile::defaultRetention();
+
+        $schedule = $data['schedule'] ?? $defaultSchedule?->config['cron'] ?? '0 2 * * *';
         unset($data['schedule']);
+
+        if ($defaultRetention && empty($data['retention_policy'])) {
+            $data['retention_policy'] = $defaultRetention->config;
+        }
 
         $source = Source::create($data);
 

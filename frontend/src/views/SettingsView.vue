@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from "vue";
 import {
   Timer,
   CalendarClock,
+  SlidersHorizontal,
   Plus,
   Pencil,
   Trash2,
@@ -16,7 +17,28 @@ import { useConfirm } from "@/composables/useConfirm";
 const store = useSettingsStore();
 const { confirm } = useConfirm();
 const loading = ref(true);
-const activeTab = ref<"retention" | "schedule">("retention");
+const activeTab = ref<"system" | "retention" | "schedule">("system");
+
+// System settings
+const systemSaving = ref(false);
+const maxParallelJobs = ref(2);
+const timezone = ref("");
+const appUrl = ref("");
+
+function initSystemFields() {
+  maxParallelJobs.value = parseInt(store.settings["max_parallel_jobs"] || "2", 10);
+  timezone.value = store.settings["timezone"] || "";
+  appUrl.value = store.settings["app_url"] || "";
+}
+
+async function saveSystemSetting(key: string, value: string) {
+  systemSaving.value = true;
+  try {
+    await store.saveSettings([{ key, value }]);
+  } finally {
+    systemSaving.value = false;
+  }
+}
 
 // Profile editing
 const showProfileModal = ref(false);
@@ -128,6 +150,7 @@ function buildCronFromSimple(): string {
 onMounted(async () => {
   try {
     await Promise.all([store.fetchProfiles(), store.fetchSettings()]);
+    initSystemFields();
   } finally {
     loading.value = false;
   }
@@ -282,6 +305,18 @@ function profileCron(profile: Profile): string {
         <button
           class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px"
           :class="
+            activeTab === 'system'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-text-muted hover:text-text-primary'
+          "
+          @click="activeTab = 'system'"
+        >
+          <SlidersHorizontal class="inline h-4 w-4 mr-1.5 -mt-0.5" />
+          System
+        </button>
+        <button
+          class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px"
+          :class="
             activeTab === 'retention'
               ? 'border-primary text-primary'
               : 'border-transparent text-text-muted hover:text-text-primary'
@@ -303,6 +338,86 @@ function profileCron(profile: Profile): string {
           <CalendarClock class="inline h-4 w-4 mr-1.5 -mt-0.5" />
           Schedule Profiles
         </button>
+      </div>
+
+      <!-- System Settings -->
+      <div v-if="activeTab === 'system'" class="mt-4 space-y-6">
+        <p class="text-sm text-text-muted">
+          Core system parameters. Some changes take effect after the next
+          container restart.
+        </p>
+
+        <div class="space-y-4">
+          <!-- Max Parallel Jobs -->
+          <div
+            class="rounded-lg border border-border p-4 flex items-center justify-between"
+          >
+            <div>
+              <h3 class="text-sm font-medium text-text-primary">
+                Max Parallel Jobs
+              </h3>
+              <p class="text-xs text-text-muted mt-0.5">
+                How many backup/restore jobs can run concurrently. Requires
+                restart.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <input
+                v-model.number="maxParallelJobs"
+                type="number"
+                min="1"
+                max="20"
+                class="w-16 rounded-lg border border-border bg-surface-raised px-2 py-1.5 text-sm text-text-primary text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                @change="
+                  saveSystemSetting(
+                    'max_parallel_jobs',
+                    String(maxParallelJobs),
+                  )
+                "
+              />
+            </div>
+          </div>
+
+          <!-- Timezone -->
+          <div
+            class="rounded-lg border border-border p-4 flex items-center justify-between"
+          >
+            <div>
+              <h3 class="text-sm font-medium text-text-primary">Timezone</h3>
+              <p class="text-xs text-text-muted mt-0.5">
+                Used for scheduling and display timestamps.
+              </p>
+            </div>
+            <input
+              v-model="timezone"
+              type="text"
+              placeholder="e.g. America/Sao_Paulo"
+              class="w-56 rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              @change="saveSystemSetting('timezone', timezone)"
+            />
+          </div>
+
+          <!-- Instance URL -->
+          <div
+            class="rounded-lg border border-border p-4 flex items-center justify-between"
+          >
+            <div>
+              <h3 class="text-sm font-medium text-text-primary">
+                Instance URL
+              </h3>
+              <p class="text-xs text-text-muted mt-0.5">
+                Public URL used to access this Cellar instance.
+              </p>
+            </div>
+            <input
+              v-model="appUrl"
+              type="text"
+              placeholder="https://cellar.example.com"
+              class="w-56 rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              @change="saveSystemSetting('app_url', appUrl)"
+            />
+          </div>
+        </div>
       </div>
 
       <!-- Retention Profiles -->

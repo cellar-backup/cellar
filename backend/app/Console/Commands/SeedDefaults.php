@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Profile;
 use App\Models\Repository;
 use App\Models\User;
 use Illuminate\Console\Command;
@@ -46,6 +47,39 @@ class SeedDefaults extends Command
             $this->info('✓ Default local repository created.');
         } else {
             $this->line('  Default repository already exists, skipping.');
+        }
+
+        // 3. Default retention profile
+        if (Profile::retention()->count() === 0) {
+            Profile::create([
+                'name' => 'Standard',
+                'type' => 'retention',
+                'is_default' => true,
+                'config' => [
+                    'keep_daily' => 7,
+                    'keep_weekly' => 4,
+                    'keep_monthly' => 6,
+                    'keep_yearly' => 0,
+                ],
+            ]);
+
+            $this->info('✓ Default retention profile created (Standard).');
+        } else {
+            $this->line('  Retention profiles already exist, skipping.');
+        }
+
+        // 4. Default schedule profile
+        if (Profile::schedule()->count() === 0) {
+            Profile::create([
+                'name' => 'Daily at 02:00',
+                'type' => 'schedule',
+                'is_default' => true,
+                'config' => ['cron' => '0 2 * * *'],
+            ]);
+
+            $this->info('✓ Default schedule profile created (Daily at 02:00).');
+        } else {
+            $this->line('  Schedule profiles already exist, skipping.');
         }
 
         return self::SUCCESS;
