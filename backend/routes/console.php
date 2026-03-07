@@ -67,6 +67,12 @@ Schedule::command('cellar:sync-archives')
     ->name('cellar:sync-archives')
     ->withoutOverlapping();
 
+// Check source connectivity every 15 minutes
+Schedule::command('cellar:check-source-health')
+    ->everyFifteenMinutes()
+    ->name('cellar:check-source-health')
+    ->withoutOverlapping();
+
 // Clean up old job log files daily at 04:00 (retain 30 days)
 Schedule::call(function () {
     \App\Services\JobLogger::cleanup(30);

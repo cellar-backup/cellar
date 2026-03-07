@@ -10,7 +10,6 @@ use App\Models\Repository;
 use App\Models\Source;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Process;
 
 class SourceController extends Controller
 {
@@ -24,6 +23,12 @@ class SourceController extends Controller
                 $archiveCount = Archive::whereIn('plan_id', $planIds)->count();
                 $lastArchive = Archive::whereIn('plan_id', $planIds)->max('timestamp');
 
+                // Last backup job status (across all plans for this source)
+                $lastJob = Job::whereIn('plan_id', $planIds)
+                    ->where('job_type', 'backup')
+                    ->orderByDesc('created_at')
+                    ->first(['status', 'finished_at', 'created_at']);
+
                 $data = $s->toArray();
                 $data['display_label'] = $s->display_label;
                 $data['is_database'] = $s->getIsDatabase();
@@ -31,6 +36,8 @@ class SourceController extends Controller
                 $data['archive_count'] = $archiveCount;
                 $data['last_archive_at'] = $lastArchive;
                 $data['retention_policy'] = $s->retention_policy;
+                $data['last_job_status'] = $lastJob?->status?->value;
+                $data['last_job_at'] = $lastJob?->finished_at ?? $lastJob?->created_at;
 
                 return $data;
             });
@@ -156,79 +163,22 @@ class SourceController extends Controller
      */
     public function testConnection(Source $source): JsonResponse
     {
-        if (! $source->getIsDatabase()) {
-            // Filesystem validation for directory / docker_volume / sqlite
-            $path = $source->path;
-
-            if (empty($path)) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'No path configured for this source.',
-                ], 422);
-            }
-
-            if (! file_exists($path)) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => "Path not found: {$path}",
-                ], 422);
-            }
-
-            $isDir = is_dir($path);
-            $readable = is_readable($path);
-
-            if (! $readable) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => "Path exists but is not readable: {$path}",
-                ], 422);
-            }
-
-            return response()->json([
-                'status' => 'ok',
-                'message' => $isDir
-                    ? 'Directory is accessible and readable.'
-                    : 'File is accessible and readable.',
-            ]);
+        try {
+            $ok = $source->checkConnection();
+        } catch (\Throwable $e) {
+            $ok = false;
         }
 
-        $host = $source->host ?: 'localhost';
-        $port = $source->port ?: $source->source_type->defaultPort() ?? 5432;
-        $user = $source->username ?: ($source->source_type->value === 'postgresql' ? 'postgres' : 'root');
+        $source->update([
+            'is_reachable' => $ok,
+            'last_checked_at' => now(),
+        ]);
 
-        $result = match ($source->source_type->value) {
-            'postgresql' => Process::timeout(10)
-                ->env(['PGPASSWORD' => $source->password ?? ''])
-                ->run([
-                    'psql', '-h', $host, '-p', (string) $port,
-                    '-U', $user, '--no-password',
-                    '-c', 'SELECT 1',
-                    $source->database_name ?: 'postgres',
-                ]),
-            'mysql', 'mariadb' => Process::timeout(10)->run([
-                'mysqladmin', 'ping',
-                '-h', $host,
-                '-P', (string) $port,
-                '-u', $user,
-                ...($source->password ? ['--password='.$source->password] : []),
-            ]),
-            default => null,
-        };
-
-        if ($result === null) {
-            return response()->json([
-                'status' => 'unsupported',
-                'message' => "Connection test not implemented for {$source->source_type->value}.",
-            ]);
-        }
-
-        $ok = $result->successful();
+        $message = $ok ? 'Connection successful.' : 'Connection failed.';
 
         return response()->json([
             'status' => $ok ? 'ok' : 'error',
-            'message' => $ok
-                ? 'Connection successful.'
-                : 'Connection failed: '.$result->errorOutput(),
+            'message' => $message,
         ], $ok ? 200 : 422);
     }
 

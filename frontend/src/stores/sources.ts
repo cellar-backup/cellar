@@ -20,6 +20,10 @@ export interface Source {
   last_archive_at: string | null;
   retention_policy: Record<string, number> | null;
   extra_config: Record<string, unknown> | null;
+  is_reachable: boolean | null;
+  last_checked_at: string | null;
+  last_job_status: string | null;
+  last_job_at: string | null;
   created_at: string;
   updated_at: string;
 }

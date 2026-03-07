@@ -31,6 +31,7 @@ import {
 } from "lucide-vue-next";
 import {
   useSourcesStore,
+  type Source,
   type QuickAddPayload,
   type Policy,
   type SourceArchive,
@@ -208,15 +209,46 @@ async function testConnection(sourceId: string) {
   testing.value = sourceId;
   try {
     const result = await store.testConnection(sourceId);
-    testResults.value[sourceId] = {
-      ok: result.status === "ok",
-      detail: result.message,
-    };
+    const ok = result.status === "ok";
+    testResults.value[sourceId] = { ok, detail: result.message };
+    // Update reactive source so health dot reflects immediately
+    const source = store.sources.find((s) => s.id === sourceId);
+    if (source) {
+      source.is_reachable = ok;
+      source.last_checked_at = new Date().toISOString();
+    }
   } catch {
     testResults.value[sourceId] = { ok: false, detail: "Test failed." };
+    const source = store.sources.find((s) => s.id === sourceId);
+    if (source) {
+      source.is_reachable = false;
+      source.last_checked_at = new Date().toISOString();
+    }
   } finally {
     testing.value = null;
   }
+}
+
+function sourceHealthColor(source: Source): string {
+  if (!source.enabled) return "bg-zinc-500";
+  if (source.is_reachable === null && !source.last_job_status) return "bg-zinc-500";
+  if (source.is_reachable === false) return "bg-red-500";
+  if (source.last_job_status === "failed") return "bg-red-500";
+  if (source.is_reachable === true && source.last_job_status === "success") return "bg-emerald-500";
+  return "bg-amber-500";
+}
+
+function sourceHealthTooltip(source: Source): string {
+  if (!source.enabled) return "Source disabled";
+  if (source.is_reachable === null && !source.last_job_status) return "Not checked yet";
+  const parts: string[] = [];
+  if (source.is_reachable === true) parts.push("Connection: OK");
+  else if (source.is_reachable === false) parts.push("Connection: Failed");
+  if (source.last_job_status === "success") parts.push("Last backup: Success");
+  else if (source.last_job_status === "failed") parts.push("Last backup: Failed");
+  else if (!source.last_job_status) parts.push("No backups yet");
+  if (source.last_checked_at) parts.push("Checked: " + timeAgo(source.last_checked_at));
+  return parts.join(" · ");
 }
 
 // -- Quick-Add Wizard --
@@ -1060,7 +1092,12 @@ async function cancelJob(jobId: string, jobType: string) {
               <component :is="sourceIcon(source.source_type)" class="h-5 w-5" />
             </div>
             <div class="min-w-0">
-              <h3 class="font-medium text-text-primary truncate">
+              <h3 class="font-medium text-text-primary truncate flex items-center gap-2">
+                <span
+                  class="inline-block h-2 w-2 shrink-0 rounded-full"
+                  :class="sourceHealthColor(source)"
+                  :title="sourceHealthTooltip(source)"
+                ></span>
                 {{ source.name }}
               </h3>
               <div
