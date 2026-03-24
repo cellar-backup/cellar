@@ -53,6 +53,15 @@ class RunPrune implements ShouldQueue
             return;
         }
 
+        if (! ($plan->source?->enabled ?? true)) {
+            $job->update([
+                'status' => 'cancelled',
+                'finished_at' => now(),
+                'error_message' => 'Source is disabled.',
+            ]);
+            return;
+        }
+
         $job->update([
             'status' => 'running',
             'started_at' => now(),

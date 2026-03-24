@@ -46,9 +46,7 @@ CLAUDE.md
 AI.local.md
 
 # ----- IDE / Editor -----
-.vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
+.vscode/
 .idea/
 *.swp
 *.swo
@@ -57,8 +55,6 @@ AI.local.md
 Thumbs.db
 
 # ----- Testing -----
-.coverage
-htmlcov/
 coverage/
 *.lcov
 .phpunit.result.cache

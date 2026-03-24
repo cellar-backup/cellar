@@ -19,7 +19,8 @@ use Illuminate\Support\Facades\Schedule;
 */
 
 Schedule::call(function () {
-    $plans = BackupPlan::where('schedule_enabled', true)
+    $plans = BackupPlan::with('source')
+        ->where('schedule_enabled', true)
         ->whereNotNull('schedule_cron')
         ->get();
 
@@ -27,6 +28,9 @@ Schedule::call(function () {
         // Laravel's CronExpression is used internally, but Schedule::call
         // doesn't support dynamic cron per iteration. So we use a manual
         // cron matcher here.
+        if (! ($plan->source?->enabled ?? true)) {
+            continue;
+        }
         if (cronMatchesNow($plan->schedule_cron)) {
             $job = Job::create([
                 'plan_id' => $plan->id,
@@ -42,12 +46,16 @@ Schedule::call(function () {
 
 // Prune runs 30 minutes after each backup cron
 Schedule::call(function () {
-    $plans = BackupPlan::where('schedule_enabled', true)
+    $plans = BackupPlan::with('source')
+        ->where('schedule_enabled', true)
         ->whereNotNull('schedule_cron')
         ->whereJsonLength('retention_policy', '>', 0)
         ->get();
 
     foreach ($plans as $plan) {
+        if (! ($plan->source?->enabled ?? true)) {
+            continue;
+        }
         $pruneCron = shiftCronMinutes($plan->schedule_cron, 30);
         if (cronMatchesNow($pruneCron)) {
             $job = Job::create([
