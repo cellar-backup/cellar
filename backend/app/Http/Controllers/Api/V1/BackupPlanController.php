@@ -118,6 +118,10 @@ class BackupPlanController extends Controller
 
     public function backup(BackupPlan $plan): JsonResponse
     {
+        if ($plan->source && ! $plan->source->enabled) {
+            return response()->json(['detail' => 'Source is disabled. Enable the source before running a backup.'], 422);
+        }
+
         $job = Job::create([
             'plan_id' => $plan->id,
             'job_type' => 'backup',
