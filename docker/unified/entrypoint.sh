@@ -22,7 +22,7 @@ fi
 sed -i 's|REVERB_HOST=cellar-reverb|REVERB_HOST=127.0.0.1|' /app/.env
 
 # ── Allow runtime env-var overrides ──────────────
-for VAR in REDIS_HOST REDIS_PORT REDIS_PASSWORD APP_URL SANCTUM_STATEFUL_DOMAINS; do
+for VAR in REDIS_HOST REDIS_PORT REDIS_PASSWORD REDIS_DB APP_URL SANCTUM_STATEFUL_DOMAINS; do
     eval VAL=\${$VAR:-}
     if [ -n "$VAL" ]; then
         sed -i "s|^${VAR}=.*|${VAR}=${VAL}|" /app/.env
