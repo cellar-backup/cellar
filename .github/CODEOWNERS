@@ -1,0 +1,29 @@
+# =============================================================================
+# Cellar — Code Owners
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+# =============================================================================
+#
+# Default owner for everything — single maintainer for now.
+# As the project grows, assign paths to specific reviewers.
+
+*                           @cellar-backup/maintainers
+
+# ── Critical paths requiring explicit owner review ──────────
+
+# Security-sensitive
+SECURITY.md                 @cellar-backup/maintainers
+backend/app/Http/Controllers/Api/V1/AuthController.php  @cellar-backup/maintainers
+backend/app/Http/Controllers/Api/V1/SetupController.php @cellar-backup/maintainers
+backend/config/cellar.php   @cellar-backup/maintainers
+
+# CI / Release
+.github/                    @cellar-backup/maintainers
+release-please-config.json  @cellar-backup/maintainers
+docker/                     @cellar-backup/maintainers
+
+# Database migrations
+backend/database/migrations/ @cellar-backup/maintainers
+
+# Backup engine (core logic)
+backend/app/Services/Engines/ @cellar-backup/maintainers
+backend/app/Jobs/           @cellar-backup/maintainers
