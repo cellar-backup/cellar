@@ -22,16 +22,9 @@
         { "type": "test",     "section": "🧪 Tests",  "hidden": true }
       ],
       "extra-files": [
-        {
-          "type": "json",
-          "path": "frontend/package.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
-          "path": "backend/composer.json",
-          "jsonpath": "$.version"
-        }
+        "frontend/package.json",
+        "frontend/package-lock.json",
+        "backend/composer.json"
       ]
     }
   }
