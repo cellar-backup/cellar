@@ -20,7 +20,7 @@ COPY frontend/ .
 RUN npm run build
 
 # ── Stage 2: Unified runtime ─────────────────────────────────
-FROM php:8.4-cli
+FROM php:8.5-cli
 
 LABEL org.opencontainers.image.title="Cellar"
 LABEL org.opencontainers.image.description="Container-native backup management platform"
