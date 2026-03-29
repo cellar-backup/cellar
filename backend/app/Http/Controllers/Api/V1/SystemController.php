@@ -12,7 +12,7 @@ class SystemController extends Controller
     {
         return response()->json([
             'status' => 'healthy',
-            'version' => config('app.version', '0.1.0'),
+            'version' => config('app.version', '0.10.0'),
             'needs_setup' => !AppSetting::get('setup_completed'),
             'checks' => [
                 'database' => $this->checkDatabase(),
