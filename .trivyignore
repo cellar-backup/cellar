@@ -1,0 +1,10 @@
+# Trivy vulnerability suppressions
+# Format: CVE-ID [expiry] [# comment]
+#
+# CVE-2026-25679: net/url IPv6 parsing bug in Go stdlib
+# Affects: kubectl binary (embedded Go stdlib v1.25.7)
+# Fix available in Go 1.25.8 / 1.26.1, but no kubectl release
+# compiled against the patched Go runtime is available yet.
+# Track: https://github.com/kubernetes/kubernetes/issues (update kubectl
+# ARG KUBECTL_VERSION once a release with Go 1.25.8+ is published)
+CVE-2026-25679
