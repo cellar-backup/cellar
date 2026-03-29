@@ -97,11 +97,17 @@ Schedule::call(function () {
 
 // Prune runs 30 minutes after each backup cron
 Schedule::call(function () {
+    // Retention may live on BackupPlan OR Source (migrated).
+    // Fetch all scheduled plans and filter in PHP so we don't silently
+    // skip plans whose retention moved to the Source model.
     $plans = BackupPlan::with('source')
         ->where('schedule_enabled', true)
         ->whereNotNull('schedule_cron')
-        ->whereJsonLength('retention_policy', '>', 0)
-        ->get();
+        ->get()
+        ->filter(function (BackupPlan $plan) {
+            $retention = $plan->source?->retention_policy ?? $plan->retention_policy ?? [];
+            return ! empty($retention);
+        });
 
     foreach ($plans as $plan) {
         if (! ($plan->source?->enabled ?? true)) {
