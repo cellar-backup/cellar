@@ -33,7 +33,7 @@ class BackupJobTest extends TestCase
 
         $source = Source::create([
             'name' => 'Test FS',
-            'source_type' => 'filesystem',
+            'source_type' => 'directory',
             'path' => sys_get_temp_dir(),
             'enabled' => true,
         ]);
