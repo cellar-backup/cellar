@@ -10,12 +10,12 @@ use App\Models\Repository;
 use App\Models\Source;
 use App\Services\Engines\BorgEngine;
 use App\Services\Engines\BorgError;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Tests\TestCase;
 
 class RestoreFailureTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseMigrations;
 
     private BackupPlan $plan;
     private Archive $archive;

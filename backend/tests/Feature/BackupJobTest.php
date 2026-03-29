@@ -9,13 +9,13 @@ use App\Models\Repository;
 use App\Models\Source;
 use App\Services\Engines\BorgEngine;
 use App\Services\Engines\BackupResult;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Mockery;
 use Tests\TestCase;
 
 class BackupJobTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseMigrations;
 
     private BackupPlan $plan;
     private string $repoPath;

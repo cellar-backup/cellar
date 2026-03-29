@@ -7,13 +7,13 @@ use App\Models\BackupPlan;
 use App\Models\Repository;
 use App\Models\Source;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class BackupPlanDispatchTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseMigrations;
 
     private User $user;
     private Repository $repo;

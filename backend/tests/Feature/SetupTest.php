@@ -4,12 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\AppSetting;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Tests\TestCase;
 
 class SetupTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseMigrations;
 
     public function test_setup_creates_admin_and_completes(): void
     {
