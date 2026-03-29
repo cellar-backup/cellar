@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\RateLimiter;
 
 class SetupController extends Controller
 {
@@ -17,6 +18,22 @@ class SetupController extends Controller
             return response()->json(['message' => 'Setup has already been completed.'], 403);
         }
 
+        // Rate-limit setup attempts: 5 per minute per IP
+        $key = 'setup-attempt:'.$request->ip();
+        if (RateLimiter::tooManyAttempts($key, 5)) {
+            return response()->json(['message' => 'Too many setup attempts. Try again later.'], 429);
+        }
+        RateLimiter::hit($key, 60);
+
+        // Require a setup token if one is configured (env or file-based)
+        $expectedToken = config('cellar.setup_token');
+        if (! empty($expectedToken)) {
+            $providedToken = $request->header('X-Setup-Token') ?? $request->input('setup_token');
+            if (! hash_equals($expectedToken, (string) $providedToken)) {
+                return response()->json(['message' => 'Invalid or missing setup token.'], 403);
+            }
+        }
+
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255',
@@ -24,6 +41,7 @@ class SetupController extends Controller
             'timezone' => 'nullable|string|max:100',
             'app_url' => 'nullable|string|max:500',
             'max_parallel_jobs' => 'nullable|integer|min:1|max:20',
+            'setup_token' => 'nullable|string',
         ]);
 
         // Ensure admin user + default repo exist

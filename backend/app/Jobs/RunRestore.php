@@ -63,7 +63,10 @@ class RunRestore implements ShouldQueue
             $log->line("Archive: {$archive->archive_id}");
             $log->line("Source: {$source->display_label}");
 
-            $engine = new BorgEngine(config('cellar.borg_path', '/usr/bin/borg'));
+            $engine = new BorgEngine(
+                borgPath: config('cellar.borg_path', '/usr/bin/borg'),
+                passphrase: config('cellar.borg_passphrase'),
+            );
             $repoPath = rtrim($repo->config['path'] ?? '/data/repositories', '/').'/'.$plan->id;
 
             // 1. Extract archive to temp directory

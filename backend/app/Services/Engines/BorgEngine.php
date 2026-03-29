@@ -64,8 +64,30 @@ class BorgEngine implements BackupEngine
 
     // ── Public API ─────────────────────────────────────────────
 
-    public function initialize(string $repoPath, string $encryption = 'none'): bool
+    /**
+     * Initialize a borg repository.
+     *
+     * Defaults to repokey-blake2 encryption. To use encryption, a passphrase
+     * MUST be set on the engine instance. Passing 'none' explicitly is allowed
+     * but will log a warning — this is an intentional opt-out, not the default.
+     */
+    public function initialize(string $repoPath, string $encryption = 'repokey-blake2'): bool
     {
+        if ($encryption !== 'none' && empty($this->passphrase)) {
+            throw new BorgError(
+                'Borg repository encryption requires a passphrase. '
+                .'Set CELLAR_BORG_PASSPHRASE in your environment or explicitly pass encryption=none '
+                .'to create an unencrypted repository (NOT recommended for production).'
+            );
+        }
+
+        if ($encryption === 'none') {
+            logger()->warning(
+                "Initializing borg repo WITHOUT encryption at {$repoPath}. "
+                .'This is insecure for production use.'
+            );
+        }
+
         $this->run(
             ['init', '--encryption', $encryption, $repoPath],
             $repoPath,

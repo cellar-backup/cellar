@@ -15,14 +15,8 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        User::firstOrCreate(
-            ['username' => 'admin'],
-            [
-                'name' => 'Admin',
-                'username' => 'admin',
-                'email' => 'admin@cellar.local',
-                'password' => 'changeme', // The User model's 'hashed' cast auto-hashes
-            ],
-        );
+        // Use Artisan command which handles secure password generation.
+        // Direct seeding with fixed passwords is intentionally removed.
+        \Illuminate\Support\Facades\Artisan::call('cellar:seed-defaults');
     }
 }
