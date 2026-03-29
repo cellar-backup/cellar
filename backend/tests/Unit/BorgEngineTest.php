@@ -30,12 +30,11 @@ class BorgEngineTest extends TestCase
         // The point is: encryption=none does NOT require a passphrase
         try {
             $engine->initialize('/tmp/nonexistent-borg-repo', 'none');
+            $this->addToAssertionCount(1); // No passphrase error was thrown
         } catch (BorgError $e) {
             // Expected: borg binary failure, NOT passphrase error
             $this->assertStringNotContainsString('passphrase', $e->getMessage());
         }
-
-        $this->assertTrue(true); // If we get here, no passphrase error was thrown
     }
 
     public function test_initialize_with_passphrase_does_not_throw(): void
@@ -48,11 +47,10 @@ class BorgEngineTest extends TestCase
         // Should not throw passphrase error
         try {
             $engine->initialize('/tmp/nonexistent-borg-repo');
+            $this->addToAssertionCount(1); // No passphrase error was thrown
         } catch (BorgError $e) {
             // Borg binary failure is expected, passphrase error is not
             $this->assertStringNotContainsString('passphrase', $e->getMessage());
         }
-
-        $this->assertTrue(true);
     }
 }

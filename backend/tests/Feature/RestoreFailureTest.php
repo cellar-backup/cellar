@@ -82,10 +82,10 @@ class RestoreFailureTest extends TestCase
         }
 
         $jobRecord->refresh();
-        // Job should be failed (or still pending if exception was thrown before update)
-        $this->assertTrue(
-            in_array($jobRecord->status->value, ['failed', 'running', 'pending']),
-            "Job status should reflect the failure path, got: {$jobRecord->status->value}"
+        $this->assertEquals(
+            'failed',
+            $jobRecord->status->value,
+            "Job status should be 'failed' after borg error, got: {$jobRecord->status->value}"
         );
     }
 

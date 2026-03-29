@@ -112,7 +112,7 @@ jobs:
 
       - name: npm audit
         working-directory: frontend
-        run: npm audit --audit-level=high || true  # warn on moderate, fail on high+
+        run: npm audit --audit-level=high  # fail on high+
 
   # ---------- Container scan ----------
   container-scan:
@@ -180,7 +180,29 @@ jobs:
             type=semver,pattern={{version}}
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build & push unified image
+      - name: Build image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/unified/Dockerfile
+          push: false
+          load: true
+          tags: cellar:scan
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: 'cellar:scan'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          trivyignores: '.trivyignore'
+
+      - name: Push image
         uses: docker/build-push-action@v6
         with:
           context: .

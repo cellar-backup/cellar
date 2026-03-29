@@ -71,12 +71,17 @@ class AuthTest extends TestCase
     public function test_logout_revokes_token(): void
     {
         $user = User::factory()->create();
+        $token = $user->createToken('test-token')->plainTextToken;
 
-        $response = $this->actingAs($user)
-            ->postJson('/api/v1/auth/logout');
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $token,
+        ])->postJson('/api/v1/auth/logout');
 
         $response->assertOk()
             ->assertJson(['message' => 'Logged out.']);
+
+        // Verify the token was actually removed from the database
+        $this->assertDatabaseCount('personal_access_tokens', 0);
     }
 
     public function test_me_returns_authenticated_user(): void

@@ -39,7 +39,7 @@ class SeedDefaults extends Command
                     $this->warn('╔══════════════════════════════════════════════════════════╗');
                     $this->warn('║  GENERATED ADMIN PASSWORD — SAVE THIS NOW               ║');
                     $this->warn('╠══════════════════════════════════════════════════════════╣');
-                    $this->warn("║  Password: {$password}");
+                    $this->warn("║  Password: {$password}".str_repeat(' ', max(0, 46 - strlen($password))).'║');
                     $this->warn('║                                                          ║');
                     $this->warn('║  Change it immediately after first login, or set          ║');
                     $this->warn('║  CELLAR_ADMIN_PASSWORD in your environment.               ║');
