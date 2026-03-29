@@ -93,39 +93,47 @@ Schedule::call(function () {
 |--------------------------------------------------------------------------
 */
 
-function cellarTimezone(): string
-{
-    try {
-        return \App\Models\AppSetting::get('timezone', 'UTC') ?: 'UTC';
-    } catch (\Throwable) {
-        return 'UTC';
+if (! function_exists('cellarTimezone')) {
+    function cellarTimezone(): string
+    {
+        try {
+            return \App\Models\AppSetting::get('timezone', 'UTC') ?: 'UTC';
+        } catch (\Throwable) {
+            return 'UTC';
+        }
     }
 }
 
-function cronMatchesNow(string $cron): bool
-{
-    $expression = new \Cron\CronExpression($cron);
+if (! function_exists('cronMatchesNow')) {
+    function cronMatchesNow(string $cron): bool
+    {
+        $expression = new \Cron\CronExpression($cron);
 
-    return $expression->isDue('now', cellarTimezone());
+        return $expression->isDue('now', cellarTimezone());
+    }
 }
 
-function nextCronRun(string $cron): \DateTimeInterface
-{
-    $expression = new \Cron\CronExpression($cron);
+if (! function_exists('nextCronRun')) {
+    function nextCronRun(string $cron): \DateTimeInterface
+    {
+        $expression = new \Cron\CronExpression($cron);
 
-    return $expression->getNextRunDate('now', 0, false, cellarTimezone());
+        return $expression->getNextRunDate('now', 0, false, cellarTimezone());
+    }
 }
 
-function shiftCronMinutes(string $cron, int $addMinutes): string
-{
-    $parts = explode(' ', $cron);
-    if (count($parts) < 5) {
-        return $cron;
-    }
+if (! function_exists('shiftCronMinutes')) {
+    function shiftCronMinutes(string $cron, int $addMinutes): string
+    {
+        $parts = explode(' ', $cron);
+        if (count($parts) < 5) {
+            return $cron;
+        }
 
-    if (is_numeric($parts[0])) {
-        $parts[0] = (string) (((int) $parts[0] + $addMinutes) % 60);
-    }
+        if (is_numeric($parts[0])) {
+            $parts[0] = (string) (((int) $parts[0] + $addMinutes) % 60);
+        }
 
-    return implode(' ', $parts);
+        return implode(' ', $parts);
+    }
 }
