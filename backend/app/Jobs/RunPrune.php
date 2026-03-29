@@ -76,7 +76,10 @@ class RunPrune implements ShouldQueue
             $log->line('Retention policy: '.json_encode($retentionPolicy));
             $log->line('Dry run: '.($this->dryRun ? 'yes' : 'no'));
 
-            $engine = new BorgEngine(config('cellar.borg_path', '/usr/bin/borg'));
+            $engine = new BorgEngine(
+                borgPath: config('cellar.borg_path', '/usr/bin/borg'),
+                passphrase: config('cellar.borg_passphrase'),
+            );
             $repoPath = rtrim($plan->repository->config['path'] ?? '/data/repositories', '/').'/'.$plan->id;
 
             $job->update(['progress' => 20]);

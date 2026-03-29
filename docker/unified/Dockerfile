@@ -48,8 +48,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && pecl install redis && docker-php-ext-enable redis \
     && rm -rf /var/lib/apt/lists/*
 
-# Install kubectl for Kubernetes Radar feature
-RUN curl -fsSL "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/$(dpkg --print-architecture)/kubectl" \
+# Install kubectl for Kubernetes Radar feature (pinned to avoid CVE-2026-25679 in <1.25.8/1.26.1)
+ARG KUBECTL_VERSION=v1.35.3
+RUN curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/$(dpkg --print-architecture)/kubectl" \
     -o /usr/local/bin/kubectl \
     && chmod +x /usr/local/bin/kubectl
 

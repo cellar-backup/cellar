@@ -20,7 +20,33 @@ class SeedDefaults extends Command
         if (User::count() === 0) {
             $name = config('cellar.admin_name', 'admin');
             $email = config('cellar.admin_email', 'admin@cellar.local');
-            $password = config('cellar.admin_password', 'admin');
+
+            // Resolve password: env var → setup token file → random generation
+            // NEVER use a fixed default password.
+            $password = config('cellar.admin_password');
+
+            if (empty($password) || $password === 'admin' || $password === 'changeme') {
+                // Check for a one-time bootstrap token file
+                $tokenFile = base_path('../data/.setup_token');
+                if (file_exists($tokenFile)) {
+                    $password = trim(file_get_contents($tokenFile));
+                }
+
+                // Still empty/weak? Generate a cryptographically random password
+                if (empty($password) || $password === 'admin' || $password === 'changeme') {
+                    $password = bin2hex(random_bytes(16));
+                    $this->warn('');
+                    $this->warn('╔══════════════════════════════════════════════════════════╗');
+                    $this->warn('║  GENERATED ADMIN PASSWORD — SAVE THIS NOW               ║');
+                    $this->warn('╠══════════════════════════════════════════════════════════╣');
+                    $this->warn("║  Password: {$password}".str_repeat(' ', max(0, 46 - strlen($password))).'║');
+                    $this->warn('║                                                          ║');
+                    $this->warn('║  Change it immediately after first login, or set          ║');
+                    $this->warn('║  CELLAR_ADMIN_PASSWORD in your environment.               ║');
+                    $this->warn('╚══════════════════════════════════════════════════════════╝');
+                    $this->warn('');
+                }
+            }
 
             User::create([
                 'name' => $name,

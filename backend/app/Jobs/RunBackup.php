@@ -81,13 +81,19 @@ class RunBackup implements ShouldQueue
             $log->line("Source: {$source->display_label} ({$source->source_type->value})");
             $log->line("Repository: {$repo->name}");
 
-            $engine = new BorgEngine(config('cellar.borg_path', '/usr/bin/borg'));
+            $borgPassphrase = config('cellar.borg_passphrase');
+            $borgEncryption = config('cellar.borg_encryption', 'repokey-blake2');
+
+            $engine = new BorgEngine(
+                borgPath: config('cellar.borg_path', '/usr/bin/borg'),
+                passphrase: $borgPassphrase,
+            );
             $repoPath = rtrim($repo->config['path'] ?? '/data/repositories', '/').'/'.$plan->id;
 
             // Ensure repo is initialized
             if (! is_dir($repoPath)) {
-                $log->line("Initializing new borg repository at {$repoPath}");
-                $engine->initialize($repoPath);
+                $log->line("Initializing new borg repository at {$repoPath} (encryption: {$borgEncryption})");
+                $engine->initialize($repoPath, $borgEncryption);
             }
 
             $job->update(['progress' => 10]);
