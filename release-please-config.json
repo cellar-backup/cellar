@@ -25,6 +25,11 @@
           "type": "json",
           "path": "frontend/package.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "backend/composer.json",
+          "jsonpath": "$.version"
         }
       ]
     }
