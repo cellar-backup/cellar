@@ -1,0 +1,61 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          release-type: node
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # Re-tag the Docker image with the new semver when a release is created.
+  # The main ci.yml already builds & pushes on tag pushes, so this just
+  # re-uses those published images and adds the semver aliases.
+  tag-images:
+    name: Retag Docker image
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Re-tag unified image with semver aliases
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          # Strip leading 'v' for OCI semver convention
+          VERSION="${TAG#v}"
+          MAJOR="${VERSION%%.*}"
+          MINOR="${VERSION%.*}"   # x.y
+          IMAGE="ghcr.io/cellar-backup/cellar"
+
+          docker pull "$IMAGE:${TAG}" || true
+
+          for ALIAS in "$VERSION" "$MINOR" "$MAJOR" latest; do
+            docker tag "$IMAGE:${TAG}" "$IMAGE:${ALIAS}" && \
+              docker push "$IMAGE:${ALIAS}" || true
+          done
