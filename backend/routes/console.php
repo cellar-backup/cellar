@@ -4,7 +4,6 @@ use App\Jobs\RunBackup;
 use App\Jobs\RunPrune;
 use App\Models\BackupPlan;
 use App\Models\Job;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 
 /*
@@ -106,6 +105,7 @@ Schedule::call(function () {
         ->get()
         ->filter(function (BackupPlan $plan) {
             $retention = $plan->source?->retention_policy ?? $plan->retention_policy ?? [];
+
             return ! empty($retention);
         });
 
@@ -143,5 +143,3 @@ Schedule::command('cellar:check-source-health')
 Schedule::call(function () {
     \App\Services\JobLogger::cleanup(30);
 })->dailyAt('04:00')->timezone(cellarTimezone())->name('cellar:cleanup-job-logs');
-
-

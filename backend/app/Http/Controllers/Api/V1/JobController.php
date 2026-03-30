@@ -76,6 +76,7 @@ class JobController extends Controller
             'log_path' => $job->log_path,
         ]);
     }
+
     public function cancel(Job $job): JsonResponse
     {
         if (! in_array($job->status, [JobStatus::Running, JobStatus::Pending])) {
@@ -98,4 +99,5 @@ class JobController extends Controller
         return response()->json([
             'detail' => 'Job cancelled.',
         ]);
-    }}
+    }
+}

@@ -61,6 +61,7 @@ class RunBackup implements ShouldQueue
                 'finished_at' => now(),
                 'error_message' => 'Source is disabled.',
             ]);
+
             return;
         }
 
@@ -102,6 +103,7 @@ class RunBackup implements ShouldQueue
             if ($job->isCancelled()) {
                 $log->line('Job cancelled by user.');
                 $log->close();
+
                 return;
             }
 
@@ -171,16 +173,16 @@ class RunBackup implements ShouldQueue
                 }
 
                 if (! $dumpResult || ! $dumpResult->success) {
-                    $log->line("FAILED: ".($dumpResult?->message ?? 'Dump returned no result'));
+                    $log->line('FAILED: '.($dumpResult?->message ?? 'Dump returned no result'));
                     throw new \RuntimeException('Database dump failed: '.($dumpResult?->message ?? 'No dump result'));
                 }
 
                 $log->line("Dump completed: {$dumpResult->dumpPath} ({$dumpResult->sizeBytes} bytes)");
                 $log->line("Info: {$dumpResult->message}");
                 if (str_contains($dumpResult->message, 'kubectl exec')) {
-                    $log->line("Method: kubectl exec (in-pod dump)");
+                    $log->line('Method: kubectl exec (in-pod dump)');
                 } else {
-                    $log->line("Method: direct network connection");
+                    $log->line('Method: direct network connection');
                 }
                 $sourcePaths = [$tmpDir];
                 $job->update(['progress' => 55]);
@@ -195,6 +197,7 @@ class RunBackup implements ShouldQueue
             if ($job->isCancelled()) {
                 $log->line('Job cancelled by user.');
                 $log->close();
+
                 return;
             }
 
@@ -206,7 +209,7 @@ class RunBackup implements ShouldQueue
             $job->update(['progress' => 60]);
             $log->section('Borg backup');
             $log->line("Archive: {$archiveName}");
-            $log->line("Compression: ".($plan->compression ?? 'lz4'));
+            $log->line('Compression: '.($plan->compression ?? 'lz4'));
 
             $result = $engine->backup(
                 $repoPath,
@@ -216,7 +219,7 @@ class RunBackup implements ShouldQueue
             );
 
             $job->update(['progress' => 90]);
-            $log->line("Backup completed successfully");
+            $log->line('Backup completed successfully');
             $log->line("Original size: {$result->sizeOriginal}");
             $log->line("Deduplicated size: {$result->sizeDedup}");
             $log->line("Compressed size: {$result->sizeCompressed}");
@@ -307,6 +310,7 @@ class RunBackup implements ShouldQueue
             $cluster = RadarCluster::find($k8s['cluster_id']);
             if (! $cluster) {
                 $log->line("K8s cluster {$k8s['cluster_id']} not found, skipping kubectl exec.");
+
                 return null;
             }
 
@@ -328,6 +332,7 @@ class RunBackup implements ShouldQueue
 
                 if (! $podName) {
                     $log->line("No running pod found for app={$k8s['app_name']}.");
+
                     return null;
                 }
 
@@ -335,6 +340,7 @@ class RunBackup implements ShouldQueue
                 $kubectlConfig['pod'] = $podName;
 
                 $log->line("Dumping via kubectl exec into {$podName}...");
+
                 return DatabaseDumper::dumpViaKubectl(
                     $source->source_type->value,
                     $dbConfig,
@@ -350,6 +356,7 @@ class RunBackup implements ShouldQueue
             }
         } catch (\Throwable $e) {
             $log->line("kubectl exec dump error: {$e->getMessage()}");
+
             return null;
         }
     }

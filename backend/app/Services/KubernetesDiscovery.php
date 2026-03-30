@@ -459,7 +459,7 @@ class KubernetesDiscovery
 
                 // Refine mysql → mariadb if the service name or labels hint at MariaDB
                 if ($sourceType === 'mysql') {
-                    $nameHint = strtolower($canonicalName . ' ' . $svcName);
+                    $nameHint = strtolower($canonicalName.' '.$svcName);
                     $labelHint = strtolower(implode(' ', array_values($labels)));
                     if (str_contains($nameHint, 'mariadb') || str_contains($labelHint, 'mariadb')) {
                         $sourceType = 'mariadb';
@@ -683,9 +683,9 @@ class KubernetesDiscovery
      * POSTGRES_USER, etc.) to discover inline values and infer usernames
      * when a root password is configured but no explicit user is set.
      *
-     * @param  array   $envVars    Container env var definitions from pod spec
-     * @param  string  $sourceType The detected source type (mysql, mariadb, postgresql, etc.)
-     * @return array   Keys: username, password, database — each with 'value' and/or 'inferred'
+     * @param  array  $envVars  Container env var definitions from pod spec
+     * @param  string  $sourceType  The detected source type (mysql, mariadb, postgresql, etc.)
+     * @return array Keys: username, password, database — each with 'value' and/or 'inferred'
      */
     private static function extractEnvCredentials(array $envVars, string $sourceType): array
     {
@@ -792,5 +792,4 @@ class KubernetesDiscovery
             default => 0,
         };
     }
-
 }

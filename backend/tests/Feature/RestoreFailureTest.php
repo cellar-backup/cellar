@@ -8,8 +8,6 @@ use App\Models\BackupPlan;
 use App\Models\Job;
 use App\Models\Repository;
 use App\Models\Source;
-use App\Services\Engines\BorgEngine;
-use App\Services\Engines\BorgError;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Tests\TestCase;
 
@@ -18,6 +16,7 @@ class RestoreFailureTest extends TestCase
     use DatabaseMigrations;
 
     private BackupPlan $plan;
+
     private Archive $archive;
 
     protected function setUp(): void
