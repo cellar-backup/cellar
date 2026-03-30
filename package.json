@@ -1,6 +1,6 @@
 {
   "name": "cellar",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Self-hosted backup management for homelab and small teams",
   "license": "Apache-2.0",
   "repository": {
