@@ -76,6 +76,7 @@ class RunRestore implements ShouldQueue
             if ($job->isCancelled()) {
                 $log->line('Job cancelled by user.');
                 $log->close();
+
                 return;
             }
 
@@ -93,6 +94,7 @@ class RunRestore implements ShouldQueue
             if ($job->isCancelled()) {
                 $log->line('Job cancelled by user.');
                 $log->close();
+
                 return;
             }
 
@@ -110,6 +112,7 @@ class RunRestore implements ShouldQueue
             if ($job->isCancelled()) {
                 $log->line('Job cancelled by user.');
                 $log->close();
+
                 return;
             }
 

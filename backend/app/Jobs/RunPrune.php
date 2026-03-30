@@ -59,6 +59,7 @@ class RunPrune implements ShouldQueue
                 'finished_at' => now(),
                 'error_message' => 'Source is disabled.',
             ]);
+
             return;
         }
 
@@ -87,6 +88,7 @@ class RunPrune implements ShouldQueue
             if ($job->isCancelled()) {
                 $log->line('Job cancelled by user.');
                 $log->close();
+
                 return;
             }
 
@@ -99,6 +101,7 @@ class RunPrune implements ShouldQueue
             if ($job->isCancelled()) {
                 $log->line('Job cancelled by user.');
                 $log->close();
+
                 return;
             }
 

@@ -16,7 +16,9 @@ class BackupPlanDispatchTest extends TestCase
     use DatabaseMigrations;
 
     private User $user;
+
     private Repository $repo;
+
     private Source $source;
 
     protected function setUp(): void

@@ -14,6 +14,7 @@ class BackupJobTest extends TestCase
     use DatabaseMigrations;
 
     private BackupPlan $plan;
+
     private string $repoPath;
 
     protected function setUp(): void
@@ -48,7 +49,7 @@ class BackupJobTest extends TestCase
     {
         // Cleanup
         if (is_dir($this->repoPath)) {
-            exec("rm -rf ".escapeshellarg($this->repoPath));
+            exec('rm -rf '.escapeshellarg($this->repoPath));
         }
         parent::tearDown();
     }

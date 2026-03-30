@@ -73,6 +73,7 @@ class RunVerify implements ShouldQueue
             if ($job->isCancelled()) {
                 $log->line('Job cancelled by user.');
                 $log->close();
+
                 return;
             }
 

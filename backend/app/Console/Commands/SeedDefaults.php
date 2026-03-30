@@ -6,7 +6,6 @@ use App\Models\Profile;
 use App\Models\Repository;
 use App\Models\User;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Hash;
 
 class SeedDefaults extends Command
 {

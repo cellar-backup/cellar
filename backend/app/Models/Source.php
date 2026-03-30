@@ -188,13 +188,13 @@ class Source extends Model
                 $database = $this->database_name ?: ($this->source_type->value === 'postgresql' ? 'postgres' : '');
 
                 $checkCmd = match ($this->source_type->value) {
-                    'postgresql' => "PGPASSWORD=".escapeshellarg($this->password ?? '')
-                        ." psql -U ".escapeshellarg($user)
-                        ." -d ".escapeshellarg($database)
+                    'postgresql' => 'PGPASSWORD='.escapeshellarg($this->password ?? '')
+                        .' psql -U '.escapeshellarg($user)
+                        .' -d '.escapeshellarg($database)
                         ." -c 'SELECT 1' --no-password -q",
-                    'mysql', 'mariadb' => "mysqladmin ping"
-                        ." -u ".escapeshellarg($user)
-                        .($this->password ? " --password=".escapeshellarg($this->password) : ""),
+                    'mysql', 'mariadb' => 'mysqladmin ping'
+                        .' -u '.escapeshellarg($user)
+                        .($this->password ? ' --password='.escapeshellarg($this->password) : ''),
                     default => null,
                 };
 

@@ -17,9 +17,9 @@ class DatabaseRestorer
     /**
      * Restore a database dump back into the source database.
      *
-     * @param  string  $dbType       postgresql | mysql | mariadb
-     * @param  array   $config       Connection config (host, port, username, password, database_name)
-     * @param  string  $dumpPath     Path to the dump file to restore
+     * @param  string  $dbType  postgresql | mysql | mariadb
+     * @param  array  $config  Connection config (host, port, username, password, database_name)
+     * @param  string  $dumpPath  Path to the dump file to restore
      */
     public static function restore(
         string $dbType,

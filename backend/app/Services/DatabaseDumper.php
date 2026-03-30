@@ -43,10 +43,10 @@ class DatabaseDumper
      * This bypasses network/auth restrictions (e.g. root@localhost only)
      * by running mysqldump/pg_dump inside the database container itself.
      *
-     * @param  string  $dbType       Source type (postgresql, mysql, mariadb)
-     * @param  array   $config       Database config (username, password, database_name, etc.)
-     * @param  string  $outputDir    Local directory to write the dump file
-     * @param  array   $kubectlConfig  {kubectl_path, kubeconfig, context, namespace, pod}
+     * @param  string  $dbType  Source type (postgresql, mysql, mariadb)
+     * @param  array  $config  Database config (username, password, database_name, etc.)
+     * @param  string  $outputDir  Local directory to write the dump file
+     * @param  array  $kubectlConfig  {kubectl_path, kubeconfig, context, namespace, pod}
      */
     public static function dumpViaKubectl(
         string $dbType,
@@ -96,7 +96,7 @@ class DatabaseDumper
 
         if (! $result->successful() || empty(trim($result->output()))) {
             // Fallback: try app.kubernetes.io/name label
-            $cmd[array_search("-l", $cmd) + 1] = "app.kubernetes.io/name={$appName}";
+            $cmd[array_search('-l', $cmd) + 1] = "app.kubernetes.io/name={$appName}";
             $result = Process::timeout(15)->run($cmd);
 
             if (! $result->successful() || empty(trim($result->output()))) {
