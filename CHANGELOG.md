@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/cellar-backup/cellar/compare/v0.10.1...v0.11.0) (2026-03-30)
+
+
+### Features
+
+* auto-generate APP_KEY on first boot with env var priority ([#20](https://github.com/cellar-backup/cellar/issues/20)) ([17085bd](https://github.com/cellar-backup/cellar/commit/17085bdc1acd3de39251f4a31d92a21dc19e8d57))
+
 ## [0.10.1](https://github.com/cellar-backup/cellar/compare/v0.10.0...v0.10.1) (2026-03-30)
 
 
