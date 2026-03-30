@@ -34,17 +34,24 @@ done
 KEY_FILE="/app/data/.app_key"
 if [ -n "${APP_KEY:-}" ]; then
     # Explicit env var (k8s Secret, docker-compose, etc.) — use it
+    if ! echo "$APP_KEY" | grep -q '^base64:'; then
+        echo "WARNING: APP_KEY does not start with 'base64:' — this may cause Laravel crypto failures" >&2
+    fi
+    # sed delimiter is | (safe for base64: keys; escape if key contains |)
     sed -i "s|^APP_KEY=.*|APP_KEY=${APP_KEY}|" /app/.env
     echo "→ APP_KEY loaded from environment variable"
 elif [ -f "$KEY_FILE" ] && [ -s "$KEY_FILE" ]; then
     # Restore previously generated key from persistent volume
+    # sed delimiter is | (safe for base64: keys; escape if key contains |)
     sed -i "s|^APP_KEY=.*|APP_KEY=$(cat "$KEY_FILE")|" /app/.env
     echo "→ APP_KEY loaded from $KEY_FILE"
 else
     # First boot without explicit key — generate and persist
     NEW_KEY=$(php artisan key:generate --show --no-interaction)
+    # sed delimiter is | (safe for base64: keys; escape if key contains |)
     sed -i "s|^APP_KEY=.*|APP_KEY=${NEW_KEY}|" /app/.env
     echo -n "$NEW_KEY" > "$KEY_FILE"
+    chmod 600 "$KEY_FILE"
     echo "→ APP_KEY generated and persisted to $KEY_FILE"
 fi
 
