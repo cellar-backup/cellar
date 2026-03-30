@@ -26,20 +26,7 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      # Trigger CI on the release PR branch so checks run automatically.
-      # Release Please creates the PR but doesn't push a commit that fires
-      # the pull_request trigger — this no-op commit does.
-      - name: Trigger CI on release PR branch
-        if: ${{ steps.release.outputs.pr != '' && steps.release.outputs.release_created != 'true' }}
-        env:
-          PR_BRANCH: ${{ fromJson(steps.release.outputs.pr).headBranchName }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin "$PR_BRANCH"
-          git checkout "$PR_BRANCH"
-          git commit --allow-empty -m "ci: trigger checks on release PR"
-          git push origin "$PR_BRANCH"
+
 
   # Re-tag the Docker image with the new semver when a release is created.
   # The main ci.yml already builds & pushes on tag pushes, so this just
