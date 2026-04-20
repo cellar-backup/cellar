@@ -8,3 +8,10 @@
 # Track: https://github.com/kubernetes/kubernetes/issues (update kubectl
 # ARG KUBECTL_VERSION once a release with Go 1.25.8+ is published)
 CVE-2026-25679
+
+# CVE-2026-32280: Go stdlib chain building DoS
+# CVE-2026-32282: Go Root.Chmod follows symlinks
+# Affects: restic binary (embedded Go stdlib v1.25.7)
+# Fixed in Go 1.25.9/1.26.2 — waiting for restic to release with patched Go.
+CVE-2026-32280
+CVE-2026-32282
