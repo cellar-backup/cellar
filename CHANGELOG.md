@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/cellar-backup/cellar/compare/v0.12.0...v0.12.1) (2026-04-20)
+
+
+### Bug Fixes
+
+* resolve npm audit vulnerabilities ([d7af256](https://github.com/cellar-backup/cellar/commit/d7af256d6b2f1854963babfdd08ba554bef3869a))
+
 ## [0.11.0](https://github.com/cellar-backup/cellar/compare/v0.10.1...v0.11.0) (2026-03-30)
 
 
