@@ -5,24 +5,14 @@ import { useSourcesStore } from "@/stores/sources";
 import { useConfirm } from "@/composables/useConfirm";
 import { useRoute, useRouter } from "vue-router";
 import JobLogModal from "@/components/JobLogModal.vue";
-import {
-  Clock,
-  CircleCheck,
-  CircleX,
-  Loader2,
-  FileText,
-  Ban,
-} from "lucide-vue-next";
 
 const store = usePlansStore();
 const sourcesStore = useSourcesStore();
 const { confirm } = useConfirm();
 
-// Live elapsed time ticker
 const now = ref(Date.now());
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 
-// Log viewer state
 const logJobId = ref<string | null>(null);
 const logJobLabel = ref("");
 
@@ -35,14 +25,10 @@ onMounted(async () => {
     now.value = Date.now();
   }, 1000);
 
-  // Deep-link: open log viewer if ?log=<jobId> is present
   const logParam = route.query.log as string | undefined;
   if (logParam) {
     const job = store.jobs.find((j: Job) => j.id === logParam);
-    if (job) {
-      openLog(job.id, resolveSourceName(job));
-    }
-    // Clean up the query param
+    if (job) openLog(job.id, resolveSourceName(job));
     router.replace({ path: route.path, query: {} });
   }
 });
@@ -61,94 +47,29 @@ function closeLog() {
   logJobLabel.value = "";
 }
 
-function statusIcon(status: string) {
-  switch (status) {
-    case "success":
-      return CircleCheck;
-    case "failed":
-      return CircleX;
-    case "running":
-      return Loader2;
-    case "cancelled":
-      return Ban;
-    case "pending":
-      return Clock;
-    default:
-      return Clock;
-  }
-}
-
-function statusClass(status: string) {
-  switch (status) {
-    case "success":
-      return "text-success";
-    case "failed":
-      return "text-danger";
-    case "running":
-      return "text-info";
-    case "cancelled":
-      return "text-warning";
-    case "pending":
-      return "text-text-muted";
-    default:
-      return "text-text-muted";
-  }
-}
-
-function badgeClass(status: string) {
-  switch (status) {
-    case "success":
-      return "bg-success/10 text-success";
-    case "failed":
-      return "bg-danger/10 text-danger";
-    case "running":
-      return "bg-info/10 text-info";
-    case "cancelled":
-      return "bg-warning/10 text-warning";
-    case "pending":
-      return "bg-surface-raised text-text-muted";
-    default:
-      return "bg-surface-raised text-text-muted";
-  }
-}
-
 function typeLabel(type: string) {
-  switch (type) {
-    case "backup":
-      return "Backup";
-    case "prune":
-      return "Prune";
-    case "verify":
-      return "Verify";
-    case "restore":
-      return "Restore";
-    case "export":
-      return "Export";
-    default:
-      return type;
-  }
+  const map: Record<string, string> = { backup: "Backup", prune: "Prune", verify: "Verify", restore: "Restore", export: "Export" };
+  return map[type] ?? type;
 }
 
 function statusLabel(status: string) {
-  switch (status) {
-    case "pending":
-      return "Queued";
-    case "running":
-      return "Running";
-    case "success":
-      return "Success";
-    case "failed":
-      return "Failed";
-    case "cancelled":
-      return "Cancelled";
-    default:
-      return status;
-  }
+  const map: Record<string, string> = { pending: "Queued", running: "Running", success: "Success", failed: "Failed", cancelled: "Cancelled" };
+  return map[status] ?? status;
+}
+
+function statusDotClass(status: string) {
+  if (status === "success") return "status-success";
+  if (status === "failed") return "status-failed";
+  if (status === "running") return "status-running";
+  if (status === "cancelled") return "status-warn";
+  return "status-muted";
 }
 
 function fmtDate(dateStr: string | null) {
   if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleString();
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }) +
+    " · " + d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function duration(start: string | null, end: string | null) {
@@ -163,23 +84,16 @@ function duration(start: string | null, end: string | null) {
 }
 
 async function confirmCancel(jobId: string, jobType: string, status: string) {
-  const action =
-    status === "pending" ? "Cancel the queued" : "Cancel the running";
-  if (
-    !(await confirm({
-      title: "Cancel Job",
-      message:
-        action +
-        " " +
-        typeLabel(jobType) +
-        " job? This action cannot be undone.",
-      confirmLabel: "Cancel Job",
-      variant: "warning",
-    }))
-  )
-    return;
+  const action = status === "pending" ? "Cancel the queued" : "Cancel the running";
+  if (!(await confirm({
+    title: "Cancel Job",
+    message: `${action} ${typeLabel(jobType)} job? This action cannot be undone.`,
+    confirmLabel: "Cancel Job",
+    variant: "warning",
+  }))) return;
   await store.cancelJob(jobId);
 }
+
 function resolveSourceName(job: Job): string {
   if (job.source_id) {
     const src = sourcesStore.sources.find((s) => s.id === job.source_id);
@@ -190,159 +104,308 @@ function resolveSourceName(job: Job): string {
 </script>
 
 <template>
-  <div class="p-6">
+  <div class="jobs-page">
     <!-- Header -->
-    <div>
-      <h1 class="text-2xl font-semibold text-text-primary">Jobs</h1>
-      <p class="mt-1 text-text-muted">
-        History of all backup, restore, export, prune, and verify operations.
-      </p>
-    </div>
+    <header class="jobs-header">
+      <div class="header-title-block">
+        <div class="header-title">Jobs</div>
+        <div class="header-breadcrumb">all operations</div>
+      </div>
+    </header>
 
-    <!-- Loading -->
-    <div v-if="store.loading" class="mt-8 text-text-muted">Loading jobs…</div>
+    <!-- Content -->
+    <div class="jobs-content">
+      <!-- Loading -->
+      <div v-if="store.loading" class="empty-msg">
+        <div class="spinner" /> Loading jobs…
+      </div>
 
-    <!-- Empty -->
-    <div
-      v-else-if="store.jobs.length === 0"
-      class="mt-8 rounded-xl border border-dashed border-border p-12 text-center"
-    >
-      <p class="text-text-muted">No jobs recorded yet.</p>
-      <p class="mt-1 text-sm text-text-muted">
-        Trigger a backup from the Plans page to see job history here.
-      </p>
-    </div>
+      <!-- Empty -->
+      <div v-else-if="store.jobs.length === 0" class="empty-msg">
+        No jobs recorded yet. Trigger a backup to see job history here.
+      </div>
 
-    <!-- Table -->
-    <div
-      v-else
-      class="mt-6 overflow-x-auto rounded-xl border border-border bg-surface"
-    >
-      <table class="w-full text-sm">
-        <thead>
-          <tr class="border-b border-border text-left text-xs text-text-muted">
-            <th class="px-5 py-3 font-medium">Status</th>
-            <th class="px-5 py-3 font-medium">Type</th>
-            <th class="px-5 py-3 font-medium">Source</th>
-            <th class="px-5 py-3 font-medium">Started</th>
-            <th class="px-5 py-3 font-medium">Duration</th>
-            <th class="px-5 py-3 font-medium">Progress</th>
-            <th class="px-5 py-3 font-medium">Message</th>
-            <th class="px-5 py-3 font-medium w-16"></th>
-          </tr>
-        </thead>
-        <TransitionGroup name="table-row" tag="tbody">
-          <tr
-            v-for="job in store.sortedJobs"
+      <!-- Table -->
+      <div v-else class="jobs-table-wrap">
+        <div class="jobs-table-header">
+          <div>Status</div>
+          <div>Type</div>
+          <div>Database</div>
+          <div>Started</div>
+          <div>Duration</div>
+          <div>Progress</div>
+          <div></div>
+        </div>
+        <TransitionGroup name="job-row">
+          <div
+            v-for="(job, idx) in store.sortedJobs"
             :key="job.id"
-            class="border-b border-border last:border-none transition-all duration-300"
+            class="jobs-table-row"
+            :style="{ '--idx': idx }"
           >
-            <td class="px-5 py-3">
-              <span
-                class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium"
-                :class="badgeClass(job.status)"
-              >
-                <component
-                  :is="statusIcon(job.status)"
-                  class="h-3.5 w-3.5"
-                  :class="[
-                    statusClass(job.status),
-                    job.status === 'running' ? 'animate-spin' : '',
-                  ]"
-                />
-                {{ statusLabel(job.status) }}
-              </span>
-            </td>
-            <td class="px-5 py-3 text-text-primary">
-              {{ typeLabel(job.job_type) }}
-            </td>
-            <td class="px-5 py-3 text-text-muted">
-              {{ resolveSourceName(job) }}
-            </td>
-            <td class="px-5 py-3 text-text-muted">
-              {{ fmtDate(job.started_at) }}
-            </td>
-            <td class="px-5 py-3 text-text-muted tabular-nums">
-              {{ duration(job.started_at, job.finished_at) }}
-            </td>
-            <td class="px-5 py-3">
-              <div
-                v-if="job.status === 'running'"
-                class="flex items-center gap-2 min-w-[120px]"
-              >
-                <div
-                  class="h-1.5 flex-1 overflow-hidden rounded-full bg-info/10"
-                >
-                  <div
-                    class="h-full rounded-full bg-info transition-all duration-500 ease-out"
-                    :style="{ width: (job.progress ?? 0) + '%' }"
-                  />
+            <!-- Status -->
+            <div class="job-status-cell">
+              <span class="job-status-dot" :class="statusDotClass(job.status)" />
+              <span class="job-status-label">{{ statusLabel(job.status) }}</span>
+            </div>
+
+            <!-- Type -->
+            <div class="job-type">{{ typeLabel(job.job_type) }}</div>
+
+            <!-- Source / Database -->
+            <div class="job-source">{{ resolveSourceName(job) }}</div>
+
+            <!-- Started -->
+            <div class="job-mono">{{ fmtDate(job.started_at) }}</div>
+
+            <!-- Duration -->
+            <div class="job-mono">{{ duration(job.started_at, job.finished_at) }}</div>
+
+            <!-- Progress -->
+            <div class="job-progress-cell">
+              <template v-if="job.status === 'running'">
+                <div class="progress-bar">
+                  <div class="progress-fill" :style="{ width: `${job.progress ?? 0}%` }" />
                 </div>
-                <span class="text-xs text-info tabular-nums whitespace-nowrap"
-                  >{{ job.progress ?? 0 }}%</span
-                >
-              </div>
-              <span
-                v-else-if="job.status === 'success'"
-                class="text-xs text-success"
-                >100%</span
+                <span class="progress-text">{{ job.progress ?? 0 }}%</span>
+              </template>
+              <span v-else-if="job.status === 'success'" class="progress-done">100%</span>
+              <span v-else class="job-mono">—</span>
+            </div>
+
+            <!-- Actions -->
+            <div class="job-actions">
+              <button
+                class="tl-action-btn"
+                title="View log"
+                @click="openLog(job.id, `${typeLabel(job.job_type)} — ${resolveSourceName(job)}`)"
               >
-              <span
-                v-else-if="job.status === 'pending'"
-                class="text-xs text-text-muted italic"
-                >Queued</span
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 2.5h10a1 1 0 011 1v9a1 1 0 01-1 1H3a1 1 0 01-1-1v-9a1 1 0 011-1z" />
+                  <path d="M5 6h6M5 9h4" />
+                </svg>
+              </button>
+              <button
+                v-if="job.status === 'running' || job.status === 'pending'"
+                class="tl-action-btn danger"
+                title="Cancel job"
+                @click="confirmCancel(job.id, job.job_type, job.status)"
               >
-              <span v-else class="text-xs text-text-muted">—</span>
-            </td>
-            <td class="px-5 py-3 max-w-xs truncate text-text-muted">
-              {{ job.error_message || "—" }}
-            </td>
-            <td class="px-5 py-3">
-              <div class="flex items-center gap-1">
-                <button
-                  class="rounded p-1 text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors"
-                  title="View log"
-                  @click="
-                    openLog(
-                      job.id,
-                      `${typeLabel(job.job_type)} — ${resolveSourceName(job)}`,
-                    )
-                  "
-                >
-                  <FileText class="h-4 w-4" />
-                </button>
-                <button
-                  v-if="job.status === 'running' || job.status === 'pending'"
-                  class="rounded p-1 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors"
-                  title="Cancel job"
-                  @click="confirmCancel(job.id, job.job_type, job.status)"
-                >
-                  <Ban class="h-4 w-4" />
-                </button>
-              </div>
-            </td>
-          </tr>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                  <path d="M4 4l8 8M12 4l-8 8" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </TransitionGroup>
-      </table>
+      </div>
     </div>
 
-    <!-- ======== Log Viewer Modal ======== -->
     <JobLogModal :job-id="logJobId" :label="logJobLabel" @close="closeLog" />
   </div>
 </template>
 
 <style scoped>
-.table-row-enter-active,
-.table-row-leave-active {
+.jobs-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.jobs-header {
+  height: 60px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  padding: 0 32px;
+  background: var(--color-background);
+  flex-shrink: 0;
+}
+.header-title-block {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.header-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+}
+.header-breadcrumb {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+  letter-spacing: 0.04em;
+}
+
+.jobs-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px 80px;
+}
+
+.empty-msg {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-wine-soft);
+  border-top-color: var(--color-wine);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* Table */
+.jobs-table-wrap {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.jobs-table-header {
+  display: grid;
+  grid-template-columns: 110px 80px 1fr 160px 90px 120px 70px;
+  gap: 16px;
+  padding: 10px 20px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-faint);
+  background: var(--color-surface-raised);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.jobs-table-row {
+  display: grid;
+  grid-template-columns: 110px 80px 1fr 160px 90px 120px 70px;
+  gap: 16px;
+  padding: 14px 20px;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 13px;
+  transition: background var(--duration-fast) var(--ease-out);
+  animation: fade-up calc(0.3s * var(--motion-scale, 1) + 0.001s) var(--ease-out) both;
+  animation-delay: calc(var(--idx, 0) * 20ms);
+}
+.jobs-table-row:last-child { border-bottom: none; }
+.jobs-table-row:hover { background: var(--color-background); }
+
+.job-status-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.job-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.job-status-dot.status-success { background: var(--color-success); }
+.job-status-dot.status-failed { background: var(--color-danger); }
+.job-status-dot.status-running {
+  background: var(--color-wine);
+  animation: pulse-dot 2s var(--ease-in-out) infinite;
+}
+.job-status-dot.status-warn { background: var(--color-warning); }
+.job-status-dot.status-muted { background: var(--color-text-faint); }
+
+.job-status-label {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+.job-type {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.job-source {
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-feature-settings: "tnum";
+}
+
+.job-progress-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.progress-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-wine-soft);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--color-wine);
+  transition: width 0.5s var(--ease-out);
+}
+.progress-text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-wine);
+  min-width: 32px;
+  text-align: right;
+}
+.progress-done {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-success);
+}
+
+.job-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.tl-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-muted);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.tl-action-btn:hover {
+  background: var(--color-wine-soft);
+  color: var(--color-wine);
+}
+.tl-action-btn.danger:hover {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+/* Transitions */
+.job-row-enter-active,
+.job-row-leave-active {
   transition: all 0.3s ease;
 }
-.table-row-enter-from {
-  opacity: 0;
-}
-.table-row-leave-to {
-  opacity: 0;
-}
-.table-row-move {
-  transition: transform 0.3s ease;
-}
+.job-row-enter-from { opacity: 0; }
+.job-row-leave-to { opacity: 0; }
+.job-row-move { transition: transform 0.3s ease; }
 </style>

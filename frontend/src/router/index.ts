@@ -19,26 +19,39 @@ const router = createRouter({
     },
     {
       path: "/",
-      name: "dashboard",
-      component: () => import("@/views/DashboardView.vue"),
+      name: "backups",
+      component: () => import("@/views/BackupsView.vue"),
     },
     {
       path: "/sources",
-      name: "sources",
-      component: () => import("@/views/SourcesView.vue"),
+      redirect: "/",
     },
     {
       path: "/plans",
-      redirect: "/sources",
+      redirect: "/",
     },
     {
       path: "/archives",
-      redirect: "/sources",
+      redirect: "/",
+    },
+    {
+      path: "/dashboard",
+      redirect: "/",
     },
     {
       path: "/jobs",
       name: "jobs",
       component: () => import("@/views/JobsView.vue"),
+    },
+    {
+      path: "/schedule",
+      name: "schedule",
+      component: () => import("@/views/ScheduleView.vue"),
+    },
+    {
+      path: "/storage",
+      name: "storage",
+      component: () => import("@/views/StorageView.vue"),
     },
     {
       path: "/radar",
@@ -57,6 +70,8 @@ const router = createRouter({
 let setupChecked = false;
 
 router.beforeEach(async (to) => {
+  if (to.meta.public) return;
+
   // Check if first-time setup is needed (runs once per session)
   if (!setupChecked) {
     setupChecked = true;
@@ -70,14 +85,15 @@ router.beforeEach(async (to) => {
     }
   }
 
-  if (to.meta.public) return;
-
   const auth = useAuthStore();
 
   // On first load, validate the stored token against the backend
   if (!auth.ready) {
     const valid = await auth.checkAuth();
-    if (!valid) return { name: "login" };
+    if (!valid) {
+      return { name: "login" };
+    }
+    // Valid — allow navigation to proceed
     return;
   }
 

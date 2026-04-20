@@ -544,4 +544,40 @@ onMounted(async () => {
     transform: scale(1);
   }
 }
+
+/* ── Wine theme overrides ── */
+
+/* Card container */
+:deep(.rounded-xl.border.border-border.bg-surface) {
+  border-radius: 22px;
+  box-shadow: var(--shadow-md);
+}
+
+/* Step indicators */
+:deep(.bg-primary) {
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.2), inset 0 1px 0 oklch(1 0 0 / 0.15);
+}
+
+/* Inputs */
+:deep(input:focus),
+:deep(select:focus) {
+  border-color: var(--color-wine) !important;
+  box-shadow: 0 0 0 3px var(--color-wine-soft) !important;
+  --tw-ring-color: transparent !important;
+}
+
+/* Primary buttons */
+:deep(.bg-primary:not(.h-8)) {
+  border-radius: 10px;
+  transition: all var(--duration-fast) var(--ease-spring);
+}
+:deep(.bg-primary:not(.h-8):hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px oklch(0.4 0.14 18 / 0.35), inset 0 1px 0 oklch(1 0 0 / 0.2);
+}
+
+/* Success page icon */
+:deep(.bg-primary.h-16) {
+  border-radius: 20px;
+}
 </style>
