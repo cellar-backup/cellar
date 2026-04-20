@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Archive;
 use App\Models\BackupPlan;
 use App\Services\Engines\BorgEngine;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 
 class SyncArchives extends Command
@@ -77,7 +78,7 @@ class SyncArchives extends Command
                             'plan_id' => $plan->id,
                             'archive_id' => $archiveId,
                             'timestamp' => $borgInfo->timestamp
-                                ? \Carbon\Carbon::parse($borgInfo->timestamp)
+                                ? Carbon::parse($borgInfo->timestamp)
                                 : now(),
                             'size_original' => $info->sizeOriginal ?? 0,
                             'size_dedup' => $info->sizeDedup ?? 0,

@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
@@ -51,7 +52,7 @@ class AuthController extends Controller
     {
         $token = $request->user()->currentAccessToken();
 
-        if ($token instanceof \Laravel\Sanctum\PersonalAccessToken) {
+        if ($token instanceof PersonalAccessToken) {
             $token->delete();
         }
 

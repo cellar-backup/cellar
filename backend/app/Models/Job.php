@@ -75,6 +75,6 @@ class Job extends Model
      */
     public function isCancelled(): bool
     {
-        return $this->fresh()?->status === \App\Enums\JobStatus::Cancelled;
+        return $this->fresh()?->status === JobStatus::Cancelled;
     }
 }

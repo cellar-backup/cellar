@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Closure;
+use Illuminate\Process\ProcessResult;
 use Illuminate\Support\Facades\Process;
 
 class DumpResult
@@ -278,7 +279,7 @@ class DatabaseDumper
         ?Closure $onProgress,
         bool $isDirectory = false,
         int $timeout = 21600,
-    ): \Illuminate\Process\ProcessResult {
+    ): ProcessResult {
         $builder = Process::timeout($timeout)->env($env);
 
         if (! $onProgress || $estimatedSize <= 0) {

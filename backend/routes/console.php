@@ -2,8 +2,11 @@
 
 use App\Jobs\RunBackup;
 use App\Jobs\RunPrune;
+use App\Models\AppSetting;
 use App\Models\BackupPlan;
 use App\Models\Job;
+use App\Services\JobLogger;
+use Cron\CronExpression;
 use Illuminate\Support\Facades\Schedule;
 
 /*
@@ -16,8 +19,8 @@ if (! function_exists('cellarTimezone')) {
     function cellarTimezone(): string
     {
         try {
-            return \App\Models\AppSetting::get('timezone', 'UTC') ?: 'UTC';
-        } catch (\Throwable) {
+            return AppSetting::get('timezone', 'UTC') ?: 'UTC';
+        } catch (Throwable) {
             return 'UTC';
         }
     }
@@ -26,16 +29,16 @@ if (! function_exists('cellarTimezone')) {
 if (! function_exists('cronMatchesNow')) {
     function cronMatchesNow(string $cron): bool
     {
-        $expression = new \Cron\CronExpression($cron);
+        $expression = new CronExpression($cron);
 
         return $expression->isDue('now', cellarTimezone());
     }
 }
 
 if (! function_exists('nextCronRun')) {
-    function nextCronRun(string $cron): \DateTimeInterface
+    function nextCronRun(string $cron): DateTimeInterface
     {
-        $expression = new \Cron\CronExpression($cron);
+        $expression = new CronExpression($cron);
 
         return $expression->getNextRunDate('now', 0, false, cellarTimezone());
     }
@@ -141,5 +144,5 @@ Schedule::command('cellar:check-source-health')
 
 // Clean up old job log files daily at 04:00 (retain 30 days)
 Schedule::call(function () {
-    \App\Services\JobLogger::cleanup(30);
+    JobLogger::cleanup(30);
 })->dailyAt('04:00')->timezone(cellarTimezone())->name('cellar:cleanup-job-logs');

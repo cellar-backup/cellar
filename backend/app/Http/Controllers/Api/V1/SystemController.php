@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Redis;
 
 class SystemController extends Controller
 {
@@ -35,7 +36,7 @@ class SystemController extends Controller
     private function checkRedis(): string
     {
         try {
-            \Illuminate\Support\Facades\Redis::ping();
+            Redis::ping();
 
             return 'ok';
         } catch (\Throwable) {

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\SourceType;
+use App\Services\DatabaseDumper;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -177,7 +178,7 @@ class Source extends Model
                     'pod' => null,
                 ];
 
-                $podName = \App\Services\DatabaseDumper::findKubectlPod($kubectlConfig, $k8s['app_name']);
+                $podName = DatabaseDumper::findKubectlPod($kubectlConfig, $k8s['app_name']);
                 if (! $podName) {
                     return false;
                 }

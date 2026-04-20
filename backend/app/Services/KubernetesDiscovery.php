@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\RadarCluster;
 use Illuminate\Support\Facades\Process;
 use RuntimeException;
 
@@ -63,7 +64,7 @@ class KubernetesDiscovery
      * Create an instance from a RadarCluster model.
      * Writes kubeconfig content to a temp file if present.
      */
-    public static function fromCluster(\App\Models\RadarCluster $cluster): self
+    public static function fromCluster(RadarCluster $cluster): self
     {
         $instance = new self(
             context: $cluster->context,

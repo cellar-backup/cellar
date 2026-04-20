@@ -6,7 +6,9 @@ use App\Models\Archive;
 use App\Models\BackupPlan;
 use App\Models\Job;
 use App\Models\RadarCluster;
+use App\Models\Source;
 use App\Services\DatabaseDumper;
+use App\Services\DumpResult;
 use App\Services\Engines\BorgEngine;
 use App\Services\JobLogger;
 use Illuminate\Bus\Queueable;
@@ -299,13 +301,13 @@ class RunBackup implements ShouldQueue
      * connections, bypassing network/auth restrictions.
      */
     private function tryKubectlDump(
-        \App\Models\Source $source,
+        Source $source,
         array $dbConfig,
         string $tmpDir,
         array $k8s,
         JobLogger $log,
         ?\Closure $onProgress = null,
-    ): ?\App\Services\DumpResult {
+    ): ?DumpResult {
         try {
             $cluster = RadarCluster::find($k8s['cluster_id']);
             if (! $cluster) {
