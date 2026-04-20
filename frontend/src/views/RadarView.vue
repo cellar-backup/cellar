@@ -432,15 +432,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="p-6">
-    <!-- Header -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-semibold text-text-primary">Radar</h1>
-        <p class="mt-1 text-text-muted">
-          Discover databases and volumes in your Kubernetes clusters.
-        </p>
+  <div class="radar-page">
+    <header class="page-header">
+      <div class="page-header-title-block">
+        <div class="page-header-title">Radar</div>
+        <div class="page-header-breadcrumb">kubernetes discovery</div>
       </div>
+      <div class="page-header-spacer"></div>
       <div class="flex items-center gap-2">
         <button
           v-if="store.activeClusterId"
@@ -457,7 +455,8 @@ onMounted(() => {
           </span>
         </button>
       </div>
-    </div>
+    </header>
+    <div class="p-6">
 
     <!-- ── Cluster Selector Bar ── -->
     <div class="mt-6 rounded-xl border border-border bg-surface p-4">
@@ -1335,5 +1334,110 @@ onMounted(() => {
         </div>
       </div>
     </div>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.radar-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+}
+.page-header {
+  height: 60px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  padding: 0 24px 0 32px;
+  gap: 16px;
+  background: var(--color-background);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.page-header-title-block {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.page-header-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+}
+.page-header-breadcrumb {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+  letter-spacing: 0.04em;
+}
+.page-header-spacer { flex: 1; }
+
+/* ── Wine theme overrides for Radar internals ── */
+
+/* Modal backdrops */
+.radar-page :deep(.fixed.inset-0) {
+  background: oklch(0.15 0.02 40 / 0.35) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+[data-theme="dark"] .radar-page :deep(.fixed.inset-0) {
+  background: oklch(0 0 0 / 0.6) !important;
+}
+
+/* Modal panels */
+.radar-page :deep(.fixed .rounded-xl.border) {
+  border-radius: 22px;
+  box-shadow: var(--shadow-lg);
+}
+
+/* Section titles inside radar */
+.radar-page :deep(h2) {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-faint);
+}
+.radar-page :deep(h3.font-medium) {
+  letter-spacing: -0.01em;
+}
+
+/* Primary buttons */
+.radar-page :deep(.bg-primary) {
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.2), inset 0 1px 0 oklch(1 0 0 / 0.15);
+  transition: all var(--duration-fast) var(--ease-spring);
+}
+.radar-page :deep(.bg-primary:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px oklch(0.4 0.14 18 / 0.35), inset 0 1px 0 oklch(1 0 0 / 0.2);
+}
+
+/* Cards */
+.radar-page :deep(.rounded-xl.border.border-border.bg-surface) {
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Input focus states */
+.radar-page :deep(input:focus) {
+  border-color: var(--color-wine) !important;
+  box-shadow: 0 0 0 3px var(--color-wine-soft) !important;
+  --tw-ring-color: transparent !important;
+}
+
+/* Resource cards */
+.radar-page :deep(.space-y-2 > .flex.items-center.gap-3) {
+  border-radius: 12px;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+/* Icon containers */
+.radar-page :deep(.rounded-lg.bg-primary\/10) {
+  border-radius: 10px;
+}
+</style>

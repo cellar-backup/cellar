@@ -1,52 +1,215 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
-import { RouterLink, useRoute, useRouter } from "vue-router";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
-import { usePlansStore, type Job } from "@/stores/plans";
-import { useSourcesStore } from "@/stores/sources";
-import { useConfirm } from "@/composables/useConfirm";
-import JobLogModal from "@/components/JobLogModal.vue";
+import { useSourcesStore, type Source } from "@/stores/sources";
+import { usePlansStore } from "@/stores/plans";
+import { useTheme } from "@/composables/useTheme";
+import { useActiveDatabase } from "@/composables/useActiveDatabase";
 import echo from "@/lib/echo";
-import {
-  LayoutDashboard,
-  Database,
-  ScrollText,
-  Radar,
-  Settings,
-  ChevronLeft,
-  LogOut,
-  Wine,
-  CircleCheck,
-  CircleX,
-  Loader2,
-  Clock,
-  FileText,
-  Ban,
-  HardDriveDownload,
-  Scissors,
-  ShieldCheck,
-  RotateCcw,
-} from "lucide-vue-next";
+import JobLogModal from "@/components/JobLogModal.vue";
+import AddDatabaseModal from "@/components/AddDatabaseModal.vue";
 
-const collapsed = ref(false);
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
-const plansStore = usePlansStore();
 const sourcesStore = useSourcesStore();
-const { confirm } = useConfirm();
+const plansStore = usePlansStore();
+// Theme composable initialized (syncs data-theme to body)
+useTheme();
 
+// Active database (shared composable)
+const { activeDbId, setActiveDatabase } = useActiveDatabase();
+
+// ── State ──
+const showAddDb = ref(false);
+const search = ref("");
+const collapsed = ref<Record<string, boolean>>(
+  (() => {
+    try {
+      return JSON.parse(localStorage.getItem("cellar-groups-collapsed") || "{}");
+    } catch {
+      return {};
+    }
+  })(),
+);
+const pinned = ref<Set<string>>(
+  (() => {
+    try {
+      return new Set<string>(
+        JSON.parse(localStorage.getItem("cellar-pinned") || "[]"),
+      );
+    } catch {
+      return new Set<string>();
+    }
+  })(),
+);
+
+// Persist
+watch(
+  () => JSON.stringify(collapsed.value),
+  (v) => localStorage.setItem("cellar-groups-collapsed", v),
+);
+watch(pinned, (p) => localStorage.setItem("cellar-pinned", JSON.stringify([...p])), { deep: true });
+
+// ── Data loading ──
+onMounted(() => {
+  sourcesStore.fetchSources();
+  plansStore.fetchJobs();
+
+  echo.channel("jobs").listen(
+    ".job.updated",
+    (event: Record<string, unknown>) => {
+      plansStore.handleJobEvent(event as never);
+    },
+  );
+});
+
+onUnmounted(() => {
+  echo.leaveChannel("jobs");
+});
+
+// Auto-select first database if none selected
+watch(
+  () => sourcesStore.sources,
+  (sources) => {
+    if (!activeDbId.value && sources.length > 0) {
+      setActiveDatabase(sources[0].id);
+    }
+  },
+  { immediate: true },
+);
+
+// ── Computed: grouping & filtering ──
+const query = computed(() => search.value.trim().toLowerCase());
+
+function matchesSearch(source: Source): boolean {
+  if (!query.value) return true;
+  return (
+    source.display_label.toLowerCase().includes(query.value) ||
+    source.host.toLowerCase().includes(query.value) ||
+    source.source_type.toLowerCase().includes(query.value) ||
+    (source.database_name || "").toLowerCase().includes(query.value)
+  );
+}
+
+const filteredSources = computed(() =>
+  sourcesStore.sources.filter(matchesSearch),
+);
+
+const pinnedDbs = computed(() =>
+  filteredSources.value.filter((s) => pinned.value.has(s.id)),
+);
+
+// Group by source_type, sorted alphabetically
+const groupedByType = computed(() => {
+  const groups: Record<string, Source[]> = {};
+  for (const source of filteredSources.value) {
+    if (pinned.value.has(source.id)) continue; // shown in pinned section
+    const type = source.source_type || "other";
+    if (!groups[type]) groups[type] = [];
+    groups[type].push(source);
+  }
+  // Sort group keys alphabetically
+  return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+});
+
+const totalSources = computed(() => sourcesStore.sources.length);
+
+// ── Actions ──
+function selectDb(id: string) {
+  setActiveDatabase(id);
+  // If we're on a page that shows per-db content, stay there
+  // If on jobs/radar/settings, stay on current page
+  if (route.path === "/jobs" || route.path === "/radar" || route.path === "/settings") {
+    // stay on current page
+  } else if (route.path !== "/") {
+    router.push("/");
+  }
+}
+
+function togglePin(id: string) {
+  const next = new Set(pinned.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  pinned.value = next;
+}
+
+function toggleGroup(type: string) {
+  if (query.value) return; // don't collapse during search
+  collapsed.value = { ...collapsed.value, [type]: !collapsed.value[type] };
+}
+
+function isGroupExpanded(type: string, hasMatches: boolean): boolean {
+  if (query.value && hasMatches) return true;
+  return !collapsed.value[type];
+}
+
+// ── Navigation ──
 const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, to: "/" },
-  { label: "Sources", icon: Database, to: "/sources" },
-  { label: "Jobs", icon: ScrollText, to: "/jobs" },
-  { label: "Radar", icon: Radar, to: "/radar" },
-  { label: "Settings", icon: Settings, to: "/settings" },
+  { id: "backups", label: "Backups", icon: "bottle", to: "/" },
+  { id: "schedule", label: "Schedule", icon: "clock", to: "/schedule" },
+  { id: "jobs", label: "Jobs", icon: "scroll", to: "/jobs" },
+  { id: "storage", label: "Storage", icon: "storage", to: "/storage" },
+  { id: "radar", label: "Radar", icon: "radar", to: "/radar" },
+  { id: "settings", label: "Settings", icon: "settings", to: "/settings" },
 ];
 
-function isActive(to: string) {
-  if (to === "/") return route.path === "/";
+function isNavActive(to: string) {
+  if (to === "/") return route.path === "/" || route.path === "/backups";
   return route.path.startsWith(to);
+}
+
+// ── Running jobs ──
+const runningJobs = computed(() =>
+  plansStore.sortedJobs
+    .filter((j) => j.status === "running" || j.status === "pending")
+    .slice(0, 3),
+);
+
+// ── Helpers ──
+function formatLastBackup(source: Source): string {
+  if (!source.last_archive_at) return "—";
+  const diff = (Date.now() - new Date(source.last_archive_at).getTime()) / 60000;
+  if (diff < 60) return `${Math.round(diff)}m`;
+  if (diff < 60 * 24) return `${Math.round(diff / 60)}h`;
+  if (diff < 60 * 24 * 30) return `${Math.round(diff / 60 / 24)}d`;
+  return `${Math.round(diff / 60 / 24 / 30)}mo`;
+}
+
+function isStale(source: Source): boolean {
+  if (!source.enabled || !source.last_archive_at) return false;
+  const hoursSince =
+    (Date.now() - new Date(source.last_archive_at).getTime()) / 3600000;
+  return hoursSince > 12;
+}
+
+function typeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    postgresql: "PostgreSQL",
+    mysql: "MySQL",
+    mariadb: "MariaDB",
+    sqlite: "SQLite",
+    mongodb: "MongoDB",
+    filesystem: "Filesystem",
+    other: "Other",
+  };
+  return labels[type] || type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+function statusColor(source: Source): string {
+  if (!source.enabled) return "paused";
+  if (source.is_reachable === false) return "unreachable";
+  return "active";
+}
+
+function dotColorClass(source: Source): string {
+  const type = source.source_type;
+  if (type === "postgresql") return "wine";
+  if (type === "mysql" || type === "mariadb") return "oak";
+  if (type === "mongodb") return "sage";
+  if (type === "filesystem") return "gold";
+  return "smoke";
 }
 
 function handleLogout() {
@@ -54,314 +217,787 @@ function handleLogout() {
   router.push("/login");
 }
 
-// ── Mini jobs list ──────────────────────────────────────────
-
-const now = ref(Date.now());
-let tickTimer: ReturnType<typeof setInterval> | null = null;
-
-onMounted(() => {
-  plansStore.fetchJobs();
-  sourcesStore.fetchSources();
-
-  // Subscribe to WebSocket for real-time job updates
-  echo
-    .channel("jobs")
-    .listen(
-      ".job.updated",
-      (event: {
-        jobId: string;
-        planId: string;
-        status: string;
-        progress: number;
-        jobType: string;
-        startedAt: string | null;
-        finishedAt: string | null;
-        errorMessage: string | null;
-        planName?: string;
-        sourceName?: string;
-        sourceId?: string;
-        createdAt?: string;
-      }) => {
-        plansStore.handleJobEvent(event);
-      },
-    );
-
-  tickTimer = setInterval(() => {
-    now.value = Date.now();
-  }, 1000);
-});
-
-onUnmounted(() => {
-  echo.leaveChannel("jobs");
-  if (tickTimer) clearInterval(tickTimer);
-});
-
-const recentJobs = computed(() =>
-  plansStore.sortedJobs.filter((j) => j.status !== "pending").slice(0, 5),
-);
-
-function jobStatusIcon(status: string) {
-  if (status === "running") return Loader2;
-  if (status === "success") return CircleCheck;
-  if (status === "failed") return CircleX;
-  return Clock;
+// ── Highlight search matches ──
+function highlightMatch(text: string): string {
+  if (!query.value) return text;
+  const idx = text.toLowerCase().indexOf(query.value);
+  if (idx === -1) return text;
+  return (
+    text.slice(0, idx) +
+    `<mark>${text.slice(idx, idx + query.value.length)}</mark>` +
+    text.slice(idx + query.value.length)
+  );
 }
 
-function jobStatusColor(status: string) {
-  if (status === "running") return "text-info";
-  if (status === "success") return "text-success";
-  if (status === "failed") return "text-danger";
-  return "text-text-muted";
-}
-
-function jobTypeLabel(type: string) {
-  const map: Record<string, string> = {
-    backup: "Backup",
-    prune: "Prune",
-    verify: "Verify",
-    restore: "Restore",
-  };
-  return map[type] ?? type;
-}
-
-function jobTypeIcon(type: string) {
-  if (type === "backup") return HardDriveDownload;
-  if (type === "prune") return Scissors;
-  if (type === "verify") return ShieldCheck;
-  if (type === "restore") return RotateCcw;
-  return HardDriveDownload;
-}
-
-function jobTypeColor(type: string) {
-  if (type === "backup") return "text-info";
-  if (type === "prune") return "text-warning";
-  if (type === "verify") return "text-accent";
-  if (type === "restore") return "text-success";
-  return "text-text-muted";
-}
-
-function timeAgo(iso: string | null) {
-  if (!iso) return "";
-  const diff = now.value - new Date(iso).getTime();
-  if (diff < 0) return "just now";
-  const s = Math.floor(diff / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
-}
-
-function elapsed(job: Job) {
-  if (!job.started_at) return "";
-  const start = new Date(job.started_at).getTime();
-  const end = job.finished_at ? new Date(job.finished_at).getTime() : now.value;
-  const s = Math.max(0, Math.floor((end - start) / 1000));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rs = s % 60;
-  return `${m}m ${rs}s`;
-}
-
-function resolveSourceName(job: Job): string {
-  if (job.source_id) {
-    const src = sourcesStore.sources.find((s) => s.id === job.source_id);
-    if (src) return src.display_label;
-  }
-  return job.source_name || job.plan_name || "Job";
-}
-
+// Log modal
 const logJobId = ref<string | null>(null);
 const logJobLabel = ref("");
-
-function openJobLog(job: Job) {
-  logJobId.value = job.id;
-  logJobLabel.value = resolveSourceName(job);
-}
-
 function closeJobLog() {
   logJobId.value = null;
   logJobLabel.value = "";
 }
-
-async function cancelJob(job: Job) {
-  const typeMap: Record<string, string> = {
-    backup: "Backup",
-    prune: "Prune",
-    verify: "Verify",
-    restore: "Restore",
-  };
-  const label = typeMap[job.job_type] ?? job.job_type;
-  if (
-    !(await confirm({
-      title: "Cancel Job",
-      message: `Cancel the ${job.status === "pending" ? "queued" : "running"} ${label} job? This action cannot be undone.`,
-      confirmLabel: "Cancel Job",
-      variant: "warning",
-    }))
-  )
-    return;
-  await plansStore.cancelJob(job.id);
-}
 </script>
 
 <template>
-  <aside
-    class="flex h-full flex-col border-r border-border bg-surface transition-all duration-200"
-    :class="collapsed ? 'w-16' : 'w-60'"
-  >
-    <!-- Logo -->
-    <div class="flex h-14 items-center gap-3 px-4">
-      <div
-        class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-white"
-      >
-        <Wine class="h-4 w-4" />
+  <aside class="sidebar">
+    <!-- Job log modal (teleported) -->
+    <Teleport to="body">
+      <JobLogModal :job-id="logJobId" :label="logJobLabel" @close="closeJobLog" />
+    </Teleport>
+
+    <!-- Add database modal -->
+    <AddDatabaseModal
+      :open="showAddDb"
+      @close="showAddDb = false"
+      @added="sourcesStore.fetchSources()"
+    />
+    <!-- Brand -->
+    <div class="sidebar-brand">
+      <div class="sidebar-brand-mark">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 17V10a7 7 0 0114 0v7" />
+          <path d="M7 17v-7a3 3 0 016 0v7" />
+          <path d="M10 17v-4" />
+        </svg>
       </div>
-      <span v-if="!collapsed" class="text-lg font-semibold text-text-primary">
+      <div class="sidebar-brand-name">
         Cellar
-      </span>
+      </div>
+      <button class="sidebar-add-btn" title="Add database" @click="showAddDb = true">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M8 3v10M3 8h10" />
+        </svg>
+      </button>
     </div>
 
-    <!-- Nav -->
-    <nav class="mt-2 flex-1 space-y-1 px-2">
-      <RouterLink
-        v-for="item in navItems"
-        :key="item.to"
-        :to="item.to"
-        class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors"
-        :class="
-          isActive(item.to)
-            ? 'bg-primary/10 text-primary'
-            : 'text-text-muted hover:bg-surface-raised hover:text-text-primary'
-        "
+    <!-- Search -->
+    <div class="sidebar-search-wrap">
+      <span class="sidebar-search-icon">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="7" cy="7" r="5" />
+          <path d="M14 14l-3.5-3.5" />
+        </svg>
+      </span>
+      <input
+        v-model="search"
+        class="sidebar-search"
+        :placeholder="`Filter ${totalSources} databases…`"
+      />
+      <button
+        v-if="search"
+        class="sidebar-search-clear"
+        @click="search = ''"
       >
-        <component :is="item.icon" class="h-5 w-5 shrink-0" />
-        <span v-if="!collapsed">{{ item.label }}</span>
-      </RouterLink>
-    </nav>
+        <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M4 4l8 8M12 4l-8 8" />
+        </svg>
+      </button>
+    </div>
 
-    <!-- Mini Jobs List (expanded only) -->
-    <div
-      v-if="!collapsed && recentJobs.length > 0"
-      class="border-t border-border px-2 py-2"
-    >
-      <div class="flex items-center justify-between px-2 mb-1.5">
-        <span
-          class="text-[10px] font-semibold uppercase tracking-wider text-text-muted"
-          >Recent Jobs</span
-        >
-        <RouterLink
-          to="/jobs"
-          class="text-[10px] text-primary hover:text-primary/80 transition-colors"
-          >View all</RouterLink
-        >
+    <!-- Scrollable database list -->
+    <div class="sidebar-scroll">
+      <!-- No matches -->
+      <div v-if="query && filteredSources.length === 0" class="empty-search">
+        No matches for "{{ search }}"
       </div>
-      <div class="space-y-0.5">
+
+      <!-- Pinned section -->
+      <div v-if="pinnedDbs.length > 0" class="pinned-section">
+        <div class="env-header">
+          <span class="env-header-chevron">
+            <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 5l5 5 5-5" />
+            </svg>
+          </span>
+          <span class="env-header-name">Pinned</span>
+          <span class="env-header-count">{{ pinnedDbs.length }}</span>
+        </div>
         <div
-          v-for="job in recentJobs"
-          :key="job.id"
-          class="group flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors hover:bg-surface-raised cursor-default"
+          v-for="source in pinnedDbs"
+          :key="source.id"
+          class="db-item"
+          :class="{ active: activeDbId === source.id, paused: !source.enabled }"
+          :title="`${source.display_label} · ${source.host}`"
+          @click="selectDb(source.id)"
         >
-          <!-- Status icon -->
-          <component
-            :is="jobStatusIcon(job.status)"
-            class="h-3.5 w-3.5 shrink-0"
-            :class="[
-              jobStatusColor(job.status),
-              job.status === 'running' ? 'animate-spin' : '',
-            ]"
-          />
-          <!-- Job type icon -->
-          <component
-            :is="jobTypeIcon(job.job_type)"
-            class="h-3 w-3 shrink-0"
-            :class="jobTypeColor(job.job_type)"
-            :title="jobTypeLabel(job.job_type)"
-          />
-          <!-- Info -->
-          <div class="min-w-0 flex-1">
-            <span
-              class="block truncate text-[11px] font-medium text-text-primary leading-tight"
-            >
-              {{ resolveSourceName(job) }}
-            </span>
-            <!-- Progress bar for running jobs -->
+          <span class="db-status" :class="[statusColor(source), dotColorClass(source)]" />
+          <span class="db-item-name" v-html="highlightMatch(source.display_label)" />
+          <span v-if="isStale(source)" class="db-stale-dot" title="No recent backup" />
+          <span class="db-meta">{{ formatLastBackup(source) }}</span>
+          <button
+            class="db-pin pinned"
+            title="Unpin"
+            @click.stop="togglePin(source.id)"
+          >
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 1.5h4l-.5 4 2.5 2.5h-3.5v4l-1 2-1-2v-4H3l2.5-2.5L6 1.5z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Grouped by type -->
+      <div
+        v-for="[type, sources] in groupedByType"
+        :key="type"
+        class="env-group"
+      >
+        <div
+          class="env-header"
+          :class="{
+            collapsed: !isGroupExpanded(type, sources.length > 0),
+            'has-active': sources.some((s) => s.id === activeDbId),
+          }"
+          @click="toggleGroup(type)"
+        >
+          <span class="env-header-chevron">
+            <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 5l5 5 5-5" />
+            </svg>
+          </span>
+          <span class="env-header-name">{{ typeLabel(type) }}</span>
+          <span class="env-header-count">{{ sources.length }}</span>
+        </div>
+        <div class="env-body" :class="{ collapsed: !isGroupExpanded(type, sources.length > 0) }">
+          <div class="env-body-inner">
             <div
-              v-if="job.status === 'running'"
-              class="mt-0.5 flex items-center gap-1.5"
+              v-for="source in sources"
+              :key="source.id"
+              class="db-item"
+              :class="{ active: activeDbId === source.id, paused: !source.enabled }"
+              :title="`${source.display_label} · ${source.host}`"
+              @click="selectDb(source.id)"
             >
-              <div
-                class="h-1 flex-1 rounded-full bg-surface-raised overflow-hidden"
+              <span class="db-status" :class="[statusColor(source), dotColorClass(source)]" />
+              <span class="db-item-name" v-html="highlightMatch(source.display_label)" />
+              <span v-if="isStale(source)" class="db-stale-dot" title="No recent backup" />
+              <span class="db-meta">{{ formatLastBackup(source) }}</span>
+              <button
+                class="db-pin"
+                :class="{ pinned: pinned.has(source.id) }"
+                :title="pinned.has(source.id) ? 'Unpin' : 'Pin to top'"
+                @click.stop="togglePin(source.id)"
               >
-                <div
-                  class="h-full rounded-full bg-info transition-all duration-300"
-                  :style="{ width: `${job.progress}%` }"
-                />
-              </div>
-              <span class="text-[9px] tabular-nums text-info font-medium"
-                >{{ job.progress }}%</span
-              >
+                <svg width="11" height="11" viewBox="0 0 16 16" :fill="pinned.has(source.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 1.5h4l-.5 4 2.5 2.5h-3.5v4l-1 2-1-2v-4H3l2.5-2.5L6 1.5z" />
+                </svg>
+              </button>
             </div>
-            <!-- Time for completed/failed -->
-            <div v-else class="mt-0.5 flex items-center gap-1.5">
-              <span class="text-[10px] text-text-muted">
-                {{ timeAgo(job.finished_at || job.started_at) }}
-              </span>
-              <span
-                v-if="job.started_at"
-                class="text-[10px] text-text-muted opacity-60"
-              >
-                {{ elapsed(job) }}
-              </span>
-            </div>
-          </div>
-          <!-- Action buttons (always visible) -->
-          <div class="shrink-0 flex items-center gap-0.5">
-            <button
-              class="rounded p-1 text-text-muted hover:text-text-primary hover:bg-surface transition-colors"
-              title="View log"
-              @click.stop="openJobLog(job)"
-            >
-              <FileText class="h-3.5 w-3.5" />
-            </button>
-            <button
-              v-if="job.status === 'running' || job.status === 'pending'"
-              class="rounded p-1 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors"
-              title="Cancel job"
-              @click.stop="cancelJob(job)"
-            >
-              <Ban class="h-3.5 w-3.5" />
-            </button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- User / Logout -->
-    <div class="border-t border-border px-2 py-2">
-      <button
-        class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-surface-raised hover:text-text-primary transition-colors"
-        @click="handleLogout"
+    <!-- Running jobs mini-list -->
+    <div v-if="runningJobs.length > 0" class="sidebar-jobs">
+      <div class="sidebar-jobs-title">
+        <span>Active jobs</span>
+        <router-link to="/jobs" class="sidebar-jobs-link">View all</router-link>
+      </div>
+      <div
+        v-for="job in runningJobs"
+        :key="job.id"
+        class="sidebar-job-item"
       >
-        <LogOut class="h-5 w-5 shrink-0" />
-        <span v-if="!collapsed">Sign out</span>
-      </button>
+        <div class="sidebar-job-dot" :class="job.status" />
+        <div class="sidebar-job-info">
+          <div class="sidebar-job-name">{{ job.source_name || job.plan_name || 'Job' }}</div>
+          <div v-if="job.status === 'running'" class="sidebar-job-progress">
+            <div class="sidebar-job-bar">
+              <div class="sidebar-job-bar-fill" :style="{ width: `${job.progress}%` }" />
+            </div>
+            <span class="sidebar-job-pct">{{ job.progress }}%</span>
+          </div>
+          <div v-else class="sidebar-job-status">Queued</div>
+        </div>
+      </div>
     </div>
 
-    <!-- Collapse toggle -->
-    <button
-      class="flex h-10 items-center justify-center border-t border-border text-text-muted hover:text-text-primary transition-colors"
-      @click="collapsed = !collapsed"
-    >
-      <ChevronLeft
-        class="h-4 w-4 transition-transform"
-        :class="{ 'rotate-180': collapsed }"
-      />
-    </button>
-  </aside>
+    <!-- Bottom nav rail -->
+    <div class="sidebar-bottom">
+      <nav class="sidebar-nav">
+        <router-link
+          v-for="item in navItems"
+          :key="item.id"
+          :to="item.to"
+          class="nav-item"
+          :class="{ active: isNavActive(item.to) }"
+        >
+          <!-- Bottle icon -->
+          <svg v-if="item.icon === 'bottle'" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6.5 1.5h3v3c0 1 1.5 2 1.5 4v5.5a1.5 1.5 0 01-1.5 1.5h-3A1.5 1.5 0 015 14v-5.5c0-2 1.5-3 1.5-4v-3z" />
+            <path d="M5 10h6" />
+          </svg>
+          <!-- Clock icon -->
+          <svg v-else-if="item.icon === 'clock'" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="8" cy="8" r="6" />
+            <path d="M8 5v3l2 1.5" />
+          </svg>
+          <!-- Scroll icon -->
+          <svg v-else-if="item.icon === 'scroll'" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2.5 4h11M2.5 8h11M2.5 12h7" />
+          </svg>
+          <!-- Storage icon -->
+          <svg v-else-if="item.icon === 'storage'" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="12" height="3.5" rx="1" />
+            <rect x="2" y="9.5" width="12" height="3.5" rx="1" />
+            <circle cx="4.5" cy="4.75" r="0.5" fill="currentColor" />
+            <circle cx="4.5" cy="11.25" r="0.5" fill="currentColor" />
+          </svg>
+          <!-- Radar icon -->
+          <svg v-else-if="item.icon === 'radar'" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="8" cy="8" r="6" />
+            <circle cx="8" cy="8" r="2" />
+            <path d="M8 2v2M8 12v2" />
+          </svg>
+          <!-- Settings icon -->
+          <svg v-else-if="item.icon === 'settings'" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="8" cy="8" r="2" />
+            <path d="M8 1.5v2M8 12.5v2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M1.5 8h2M12.5 8h2M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" />
+          </svg>
+          <span>{{ item.label }}</span>
+        </router-link>
+      </nav>
 
-  <!-- Log viewer modal (in-place, no navigation) -->
-  <JobLogModal :job-id="logJobId" :label="logJobLabel" @close="closeJobLog" />
+      <!-- Storage widget -->
+      <div class="storage-widget">
+        <div class="storage-label">
+          <span>Cellar storage</span>
+          <span>{{ sourcesStore.sources.length }} dbs</span>
+        </div>
+      </div>
+
+      <!-- User / Sign out -->
+      <div class="sidebar-profile">
+        <div class="avatar">{{ auth.user?.charAt(0)?.toUpperCase() || 'U' }}</div>
+        <div class="profile-info">
+          <div class="profile-name">{{ auth.user || 'User' }}</div>
+        </div>
+        <button class="profile-logout" title="Sign out" @click="handleLogout">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2H4a2 2 0 00-2 2v8a2 2 0 002 2h2M11 11l3-3-3-3M6 8h8" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </aside>
 </template>
+
+<style scoped>
+.sidebar {
+  width: 280px;
+  background: var(--color-surface-raised);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+  height: 100vh;
+}
+
+.sidebar-brand {
+  padding: 18px 16px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.sidebar-brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--color-wine);
+  display: grid;
+  place-items: center;
+  color: oklch(0.97 0.02 80);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--color-wine) 40%, transparent),
+    inset 0 1px 0 oklch(1 0 0 / 0.15),
+    0 1px 2px oklch(0 0 0 / 0.15);
+}
+.sidebar-brand-name {
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+  flex: 1;
+}
+.sidebar-add-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--color-text-faint);
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.sidebar-add-btn:hover {
+  color: var(--color-wine);
+  border-color: var(--color-wine);
+  background: var(--color-wine-soft);
+}
+
+/* Search */
+.sidebar-search-wrap {
+  padding: 0 12px 10px;
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.sidebar-search {
+  width: 100%;
+  padding: 6px 28px 6px 28px;
+  border-radius: 7px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 12.5px;
+  outline: none;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.sidebar-search:focus {
+  border-color: var(--color-wine);
+  box-shadow: 0 0 0 3px var(--color-wine-soft);
+}
+.sidebar-search-icon {
+  position: absolute;
+  left: 22px;
+  top: 0;
+  bottom: 10px;
+  color: var(--color-text-faint);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+.sidebar-search-clear {
+  position: absolute;
+  right: 18px;
+  top: 0;
+  bottom: 10px;
+  color: var(--color-text-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  border-radius: 4px;
+}
+.sidebar-search-clear:hover {
+  color: var(--color-text-primary);
+  background: var(--color-border);
+}
+
+/* Scrollable middle */
+.sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 8px 12px;
+  scrollbar-gutter: stable;
+}
+
+/* Env group */
+.env-group {
+  margin-bottom: 4px;
+}
+.env-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  user-select: none;
+  border-radius: 6px;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.env-header:hover {
+  background: var(--color-border);
+  color: var(--color-text-muted);
+}
+.env-header-chevron {
+  display: grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  transition: transform var(--duration-DEFAULT) var(--ease-spring);
+}
+.env-header.collapsed .env-header-chevron {
+  transform: rotate(-90deg);
+}
+.env-header-name {
+  flex: 1;
+}
+.env-header-count {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--color-text-faint);
+  background: var(--color-background);
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+}
+.env-header.has-active .env-header-name {
+  color: var(--color-text-muted);
+}
+
+.env-body {
+  overflow: hidden;
+  transition: grid-template-rows calc(0.4s * var(--motion-scale, 1) + 0.001s) var(--ease-spring);
+  display: grid;
+  grid-template-rows: 1fr;
+}
+.env-body.collapsed {
+  grid-template-rows: 0fr;
+}
+.env-body-inner {
+  min-height: 0;
+  overflow: hidden;
+  padding: 2px 0 6px;
+}
+
+/* DB item */
+.db-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+  transition: background var(--duration-fast) var(--ease-out);
+  margin-bottom: 1px;
+  font-size: 12.5px;
+}
+.db-item:hover {
+  background: var(--color-border);
+}
+.db-item:hover .db-pin {
+  opacity: 0.5;
+}
+.db-item.active {
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+.db-item.active .db-item-name {
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+.db-item.active::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--color-wine);
+}
+.db-item.paused {
+  opacity: 0.55;
+}
+.db-item.paused:hover {
+  opacity: 1;
+}
+
+/* Status dot */
+.db-status {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+}
+.db-status.active.wine { background: var(--color-wine); }
+.db-status.active.oak { background: var(--color-oak); }
+.db-status.active.gold { background: var(--color-gold); }
+.db-status.active.sage { background: var(--color-sage); }
+.db-status.active.smoke { background: var(--color-smoke); }
+.db-status.active::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: inherit;
+  opacity: 0.25;
+  animation: pulse-dot 2.6s var(--ease-in-out) infinite;
+}
+.db-status.paused {
+  background: transparent;
+  border: 1.5px solid var(--color-warning);
+}
+.db-status.unreachable {
+  background: transparent;
+  border: 1.5px solid var(--color-danger);
+}
+
+.db-item-name {
+  color: var(--color-text-muted);
+  letter-spacing: -0.005em;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-item-name :deep(mark) {
+  background: var(--color-wine-soft);
+  color: var(--color-wine);
+  padding: 0 1px;
+  border-radius: 2px;
+}
+
+.db-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-faint);
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+.db-item.active .db-meta {
+  color: var(--color-text-muted);
+}
+
+.db-pin {
+  opacity: 0;
+  color: var(--color-text-faint);
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  margin-right: -4px;
+  transition: opacity var(--duration-fast), color var(--duration-fast);
+}
+.db-pin:hover {
+  color: var(--color-wine);
+  background: var(--color-wine-soft);
+  opacity: 1 !important;
+}
+.db-pin.pinned {
+  opacity: 1;
+  color: var(--color-wine);
+}
+
+/* Pinned section */
+.pinned-section {
+  padding: 4px 0 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px dashed var(--color-border);
+}
+.pinned-section .env-header {
+  color: var(--color-wine);
+}
+.pinned-section .env-header:hover {
+  background: var(--color-wine-soft);
+}
+
+/* Stale warning dot */
+.db-stale-dot {
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-warning);
+}
+
+/* Empty search */
+.empty-search {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* Bottom nav rail */
+.sidebar-bottom {
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+}
+
+.sidebar-nav {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  text-decoration: none;
+}
+.nav-item:hover {
+  background: var(--color-border);
+  color: var(--color-text-primary);
+}
+.nav-item.active {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+/* Storage widget */
+.storage-widget {
+  padding: 10px 14px;
+  border-top: 1px solid var(--color-border);
+}
+.storage-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-faint);
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Profile / sign out */
+.sidebar-profile {
+  padding: 10px 14px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(140deg, var(--color-oak), var(--color-wine));
+  display: grid;
+  place-items: center;
+  color: oklch(0.98 0.01 80);
+  font-family: var(--font-display);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.profile-info {
+  flex: 1;
+  min-width: 0;
+}
+.profile-name {
+  font-size: 12px;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-logout {
+  color: var(--color-text-faint);
+  padding: 4px;
+  border-radius: 4px;
+  transition: all var(--duration-fast);
+}
+.profile-logout:hover {
+  color: var(--color-text-primary);
+  background: var(--color-border);
+}
+
+/* Running jobs mini-list */
+.sidebar-jobs {
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-border);
+  padding: 8px 10px;
+}
+.sidebar-jobs-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-faint);
+}
+.sidebar-jobs-link {
+  font-size: 9.5px;
+  color: var(--color-wine);
+  text-decoration: none;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.sidebar-jobs-link:hover { text-decoration: underline; }
+.sidebar-job-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  border-radius: 5px;
+}
+.sidebar-job-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sidebar-job-dot.running {
+  background: var(--color-wine);
+  animation: pulse-dot 2s var(--ease-in-out) infinite;
+}
+.sidebar-job-dot.pending {
+  background: var(--color-text-faint);
+}
+.sidebar-job-info {
+  flex: 1;
+  min-width: 0;
+}
+.sidebar-job-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-job-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+.sidebar-job-bar {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-wine-soft);
+  overflow: hidden;
+}
+.sidebar-job-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--color-wine);
+  transition: width 0.5s var(--ease-out);
+}
+.sidebar-job-pct {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--color-wine);
+  min-width: 24px;
+  text-align: right;
+}
+.sidebar-job-status {
+  font-size: 10px;
+  color: var(--color-text-faint);
+  margin-top: 1px;
+}
+</style>

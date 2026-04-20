@@ -4,6 +4,7 @@ const api = axios.create({
   baseURL: "/api/v1",
   headers: {
     "Content-Type": "application/json",
+    "Accept": "application/json",
   },
 });
 
@@ -18,13 +19,21 @@ api.interceptors.request.use((config) => {
 
 // Response interceptor — handle 401 (token expired or revoked).
 // Uses soft redirect via router instead of destructive window.location.href.
+// Skip redirect if auth hasn't been marked ready yet (initial validation in progress).
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      // Lazy-import to avoid circular dependency
       const { useAuthStore } = await import("@/stores/auth");
       const auth = useAuthStore();
+
+      // If auth isn't ready yet, the router guard is handling the redirect —
+      // just clear session and let the guard do its job.
+      if (!auth.ready) {
+        auth.clearSession();
+        return Promise.reject(error);
+      }
+
       auth.clearSession();
 
       // Soft-redirect via router (no full page reload)

@@ -13,9 +13,11 @@ import {
 } from "lucide-vue-next";
 import { useSettingsStore, type Profile } from "@/stores/settings";
 import { useConfirm } from "@/composables/useConfirm";
+import { useTheme } from "@/composables/useTheme";
 
 const store = useSettingsStore();
 const { confirm } = useConfirm();
+const { theme, motion, setTheme, setMotion } = useTheme();
 const loading = ref(true);
 const activeTab = ref<"system" | "retention" | "schedule">("system");
 
@@ -287,11 +289,14 @@ function profileCron(profile: Profile): string {
 </script>
 
 <template>
-  <div class="p-6 max-w-4xl mx-auto">
-    <h1 class="text-2xl font-semibold text-text-primary">Settings</h1>
-    <p class="mt-1 text-text-muted text-sm">
-      Manage reusable profiles and default configurations for new sources.
-    </p>
+  <div class="settings-page">
+    <header class="page-header">
+      <div class="page-header-title-block">
+        <div class="page-header-title">Settings</div>
+        <div class="page-header-breadcrumb">workspace</div>
+      </div>
+    </header>
+    <div class="p-6 max-w-4xl mx-auto">
 
     <!-- Loading -->
     <div v-if="loading" class="mt-12 text-center text-text-muted">
@@ -416,6 +421,37 @@ function profileCron(profile: Profile): string {
               class="w-56 rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               @change="saveSystemSetting('app_url', appUrl)"
             />
+          </div>
+        </div>
+
+        <!-- Appearance -->
+        <div class="mt-8">
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-text-muted mb-3">Appearance</h3>
+          <div class="space-y-4">
+            <!-- Theme -->
+            <div class="rounded-lg border border-border p-4 flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-medium text-text-primary">Theme</h3>
+                <p class="text-xs text-text-muted mt-0.5">Switch between light and dark mode.</p>
+              </div>
+              <div class="segmented" style="padding: 2px; width: auto;">
+                <button :class="{ active: theme === 'light' }" @click="setTheme('light')" style="padding: 5px 12px; font-size: 12px;">Light</button>
+                <button :class="{ active: theme === 'dark' }" @click="setTheme('dark')" style="padding: 5px 12px; font-size: 12px;">Dark</button>
+              </div>
+            </div>
+
+            <!-- Motion -->
+            <div class="rounded-lg border border-border p-4 flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-medium text-text-primary">Motion</h3>
+                <p class="text-xs text-text-muted mt-0.5">Control animation intensity throughout the app.</p>
+              </div>
+              <div class="segmented" style="padding: 2px; width: auto;">
+                <button :class="{ active: motion === 'full' }" @click="setMotion('full')" style="padding: 5px 12px; font-size: 12px;">Full</button>
+                <button :class="{ active: motion === 'subtle' }" @click="setMotion('subtle')" style="padding: 5px 12px; font-size: 12px;">Subtle</button>
+                <button :class="{ active: motion === 'none' }" @click="setMotion('none')" style="padding: 5px 12px; font-size: 12px;">None</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -861,5 +897,118 @@ function profileCron(profile: Profile): string {
         </div>
       </div>
     </Teleport>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+}
+.page-header {
+  height: 60px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  padding: 0 32px;
+  background: var(--color-background);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.page-header-title-block {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.page-header-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+}
+.page-header-breadcrumb {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+  letter-spacing: 0.04em;
+}
+
+/* ── Wine theme overrides for Settings internals ── */
+
+/* Tab bar — wine accent */
+.settings-page :deep(.border-b.border-border) {
+  border-color: var(--color-border);
+}
+.settings-page :deep(.border-primary) {
+  border-color: var(--color-wine) !important;
+}
+.settings-page :deep(.text-primary) {
+  color: var(--color-wine) !important;
+}
+
+/* Modal backdrops */
+.settings-page :deep(.fixed.inset-0) {
+  background: oklch(0.15 0.02 40 / 0.35) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+[data-theme="dark"] .settings-page :deep(.fixed.inset-0) {
+  background: oklch(0 0 0 / 0.6) !important;
+}
+
+/* Modal panels */
+.settings-page :deep(.fixed .rounded-xl) {
+  border-radius: 22px;
+  box-shadow: var(--shadow-lg);
+  animation: modal-in calc(0.4s * var(--motion-scale, 1) + 0.001s) var(--ease-spring);
+}
+
+/* Cards / settings rows */
+.settings-page :deep(.rounded-lg.border.border-border) {
+  border-radius: 12px;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.settings-page :deep(.rounded-lg.border.border-border:hover) {
+  border-color: var(--color-border-strong);
+}
+
+/* Primary buttons */
+.settings-page :deep(.bg-primary) {
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.2), inset 0 1px 0 oklch(1 0 0 / 0.15);
+  border-radius: 10px;
+  transition: all var(--duration-fast) var(--ease-spring);
+}
+.settings-page :deep(.bg-primary:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px oklch(0.4 0.14 18 / 0.35), inset 0 1px 0 oklch(1 0 0 / 0.2);
+}
+
+/* Input focus states */
+.settings-page :deep(input:focus),
+.settings-page :deep(select:focus) {
+  border-color: var(--color-wine) !important;
+  box-shadow: 0 0 0 3px var(--color-wine-soft) !important;
+  --tw-ring-color: transparent !important;
+}
+
+/* Profile cards */
+.settings-page :deep(.rounded-xl.border.border-border.bg-surface) {
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Section descriptions */
+.settings-page :deep(p.text-sm.text-text-muted) {
+  font-size: 13px;
+}
+
+/* Ghost/cancel buttons */
+.settings-page :deep(.border.border-border.text-text-muted) {
+  border-radius: 10px;
+}
+</style>
