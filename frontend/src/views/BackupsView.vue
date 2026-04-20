@@ -482,6 +482,7 @@ onUnmounted(() => window.removeEventListener("keydown", handleKeydown));
     <BackupDetailsDrawer
       :archive="selectedArchive"
       @close="selectedId = null"
+      @pin-toggled="(id, val) => { const a = archives.find(x => x.id === id); if (a) a.keep_forever = val; }"
     />
 
     <!-- Advanced create modal -->

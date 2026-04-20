@@ -10,6 +10,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
+  pinToggled: [id: string, keepForever: boolean];
 }>();
 
 const sourcesStore = useSourcesStore();
@@ -73,9 +74,9 @@ async function handleRestore() {
 
 async function handleTogglePin() {
   if (!props.archive) return;
-  await sourcesStore.toggleKeepForever(props.archive.id, !props.archive.keep_forever);
-  // Optimistic update
-  props.archive.keep_forever = !props.archive.keep_forever;
+  const newValue = !props.archive.keep_forever;
+  await sourcesStore.toggleKeepForever(props.archive.id, newValue);
+  emit("pinToggled", props.archive.id, newValue);
 }
 </script>
 
