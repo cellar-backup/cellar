@@ -47,12 +47,19 @@ ENVFILE
 fi
 
 # ── Allow runtime env-var overrides ──────────────
-for VAR in DB_DATABASE REDIS_HOST REDIS_PORT REDIS_PASSWORD REDIS_DB APP_URL TRUSTED_PROXIES SANCTUM_STATEFUL_DOMAINS; do
+# Vars that users commonly override at runtime (via Docker env or K8s)
+for VAR in \
+    APP_URL APP_ENV APP_DEBUG TRUSTED_PROXIES SANCTUM_STATEFUL_DOMAINS \
+    DB_CONNECTION DB_DATABASE DB_HOST DB_PORT DB_USERNAME DB_PASSWORD \
+    REDIS_HOST REDIS_PORT REDIS_PASSWORD REDIS_DB \
+    CELLAR_MAX_PARALLEL_JOBS CELLAR_LOG_DIR \
+    REVERB_APP_ID REVERB_APP_KEY REVERB_APP_SECRET \
+; do
     eval VAL=\${$VAR:-}
     if [ -n "$VAL" ]; then
         sed -i "s|^${VAR}=.*|${VAR}=${VAL}|" /app/.env
-        # If variable exists commented out, uncomment and set it
-        sed -i "s|^#${VAR}=.*|${VAR}=${VAL}|" /app/.env
+        sed -i "s|^#\s*${VAR}=.*|${VAR}=${VAL}|" /app/.env
+        grep -q "^${VAR}=" /app/.env || echo "${VAR}=${VAL}" >> /app/.env
     fi
 done
 
