@@ -81,9 +81,9 @@ RUN composer install --no-dev --optimize-autoloader --prefer-dist
 COPY --from=frontend-build /build/public/build /app/public/build
 
 # ── Config files ─────────────────────────────────────────────
-COPY docker/unified/nginx.conf /etc/nginx/sites-available/default
-COPY docker/unified/supervisord.conf /etc/supervisor/conf.d/cellar.conf
-COPY docker/unified/entrypoint.sh /entrypoint.sh
+COPY docker/nginx.conf /etc/nginx/sites-available/default
+COPY docker/supervisord.conf /etc/supervisor/conf.d/cellar.conf
+COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # ── Static assets ────────────────────────────────────────────
