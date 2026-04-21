@@ -22,22 +22,13 @@
         { "type": "test",     "section": "🧪 Tests",  "hidden": true }
       ],
       "extra-files": [
-        "frontend/package.json",
-        "frontend/package-lock.json",
-        "backend/composer.json",
+        "package-lock.json",
+        "composer.json",
         {
           "type": "generic",
-          "path": "backend/config/cellar.php",
+          "path": "config/cellar.php",
           "patterns": [
             "/(CELLAR_VERSION',\\s*')[0-9]+\\.[0-9]+\\.[0-9]+(')/",
-            "$1{{version}}$2"
-          ]
-        },
-        {
-          "type": "generic",
-          "path": "backend/app/Http/Controllers/Api/V1/SystemController.php",
-          "patterns": [
-            "/(app\\.version',\\s*')[0-9]+\\.[0-9]+\\.[0-9]+(')/",
             "$1{{version}}$2"
           ]
         }
