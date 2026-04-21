@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.2](https://github.com/cellar-backup/cellar/compare/v0.13.1...v0.13.2) (2026-04-21)
+
+
+### Bug Fixes
+
+* release-please now bumps config/cellar.php version correctly ([#52](https://github.com/cellar-backup/cellar/issues/52)) ([a5765cb](https://github.com/cellar-backup/cellar/commit/a5765cb035b948ebf309af1dac7afbdde4ca012d))
+
 ## [0.13.1](https://github.com/cellar-backup/cellar/compare/v0.13.0...v0.13.1) (2026-04-21)
 
 
