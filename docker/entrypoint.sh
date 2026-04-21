@@ -45,7 +45,17 @@ ENVFILE
     fi
 fi
 
-# ── APP_KEY resolution ────────────────────────────
+# ── Allow runtime env-var overrides ──────────────
+for VAR in DB_DATABASE REDIS_HOST REDIS_PORT REDIS_PASSWORD REDIS_DB APP_URL SANCTUM_STATEFUL_DOMAINS; do
+    eval VAL=\${$VAR:-}
+    if [ -n "$VAL" ]; then
+        sed -i "s|^${VAR}=.*|${VAR}=${VAL}|" /app/.env
+        # If variable exists commented out, uncomment and set it
+        sed -i "s|^#${VAR}=.*|${VAR}=${VAL}|" /app/.env
+    fi
+done
+
+# ── APP_KEY resolution ─────────────────��──────────
 # Priority: 1) APP_KEY env var  2) persisted key file  3) generate new
 KEY_FILE="/app/data/.app_key"
 if [ -n "${APP_KEY:-}" ]; then

@@ -9,6 +9,7 @@ import { useActiveDatabase } from "@/composables/useActiveDatabase";
 import echo from "@/lib/echo";
 import JobLogModal from "@/components/JobLogModal.vue";
 import AddDatabaseModal from "@/components/AddDatabaseModal.vue";
+import EditDatabaseModal from "@/components/EditDatabaseModal.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -119,11 +120,8 @@ const totalSources = computed(() => sourcesStore.sources.length);
 // ── Actions ──
 function selectDb(id: string) {
   setActiveDatabase(id);
-  // If we're on a page that shows per-db content, stay there
-  // If on jobs/radar/settings, stay on current page
-  if (route.path === "/jobs" || route.path === "/radar" || route.path === "/settings") {
-    // stay on current page
-  } else if (route.path !== "/") {
+  // Always navigate to backups view for the selected database
+  if (route.path !== "/") {
     router.push("/");
   }
 }
@@ -147,7 +145,6 @@ function isGroupExpanded(type: string, hasMatches: boolean): boolean {
 
 // ── Navigation ──
 const navItems = [
-  { id: "backups", label: "Backups", icon: "bottle", to: "/" },
   { id: "schedule", label: "Schedule", icon: "clock", to: "/schedule" },
   { id: "jobs", label: "Jobs", icon: "scroll", to: "/jobs" },
   { id: "storage", label: "Storage", icon: "storage", to: "/storage" },
@@ -156,8 +153,14 @@ const navItems = [
 ];
 
 function isNavActive(to: string) {
-  if (to === "/") return route.path === "/" || route.path === "/backups";
   return route.path.startsWith(to);
+}
+
+// ── Database settings modal ──
+const editingSource = ref<Source | null>(null);
+
+function openSourceSettings(source: Source) {
+  editingSource.value = source;
 }
 
 // ── Running jobs ──
@@ -251,6 +254,13 @@ function closeJobLog() {
       @close="showAddDb = false"
       @added="sourcesStore.fetchSources()"
     />
+
+    <!-- Edit database modal -->
+    <EditDatabaseModal
+      :source="editingSource"
+      @close="editingSource = null"
+      @saved="sourcesStore.fetchSources()"
+    />
     <!-- Brand -->
     <div class="sidebar-brand">
       <div class="sidebar-brand-mark">
@@ -325,6 +335,16 @@ function closeJobLog() {
           <span v-if="isStale(source)" class="db-stale-dot" title="No recent backup" />
           <span class="db-meta">{{ formatLastBackup(source) }}</span>
           <button
+            class="db-cog"
+            title="Database settings"
+            @click.stop="openSourceSettings(source)"
+          >
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="8" r="2" />
+              <path d="M8 1.5v2M8 12.5v2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M1.5 8h2M12.5 8h2M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" />
+            </svg>
+          </button>
+          <button
             class="db-pin pinned"
             title="Unpin"
             @click.stop="togglePin(source.id)"
@@ -372,6 +392,16 @@ function closeJobLog() {
               <span class="db-item-name" v-html="highlightMatch(source.display_label)" />
               <span v-if="isStale(source)" class="db-stale-dot" title="No recent backup" />
               <span class="db-meta">{{ formatLastBackup(source) }}</span>
+              <button
+                class="db-cog"
+                title="Database settings"
+                @click.stop="openSourceSettings(source)"
+              >
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="8" cy="8" r="2" />
+                  <path d="M8 1.5v2M8 12.5v2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M1.5 8h2M12.5 8h2M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" />
+                </svg>
+              </button>
               <button
                 class="db-pin"
                 :class="{ pinned: pinned.has(source.id) }"
@@ -422,6 +452,7 @@ function closeJobLog() {
           :to="item.to"
           class="nav-item"
           :class="{ active: isNavActive(item.to) }"
+          @click="setActiveDatabase(null)"
         >
           <!-- Bottle icon -->
           <svg v-if="item.icon === 'bottle'" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -679,7 +710,8 @@ function closeJobLog() {
 .db-item:hover {
   background: var(--color-border);
 }
-.db-item:hover .db-pin {
+.db-item:hover .db-pin,
+.db-item:hover .db-cog {
   opacity: 0.5;
 }
 .db-item.active {
@@ -765,6 +797,7 @@ function closeJobLog() {
   color: var(--color-text-muted);
 }
 
+.db-cog,
 .db-pin {
   opacity: 0;
   color: var(--color-text-faint);
@@ -773,9 +806,12 @@ function closeJobLog() {
   width: 18px;
   height: 18px;
   border-radius: 4px;
-  margin-right: -4px;
   transition: opacity var(--duration-fast), color var(--duration-fast);
 }
+.db-pin {
+  margin-right: -4px;
+}
+.db-cog:hover,
 .db-pin:hover {
   color: var(--color-wine);
   background: var(--color-wine-soft);
