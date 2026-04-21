@@ -14,8 +14,39 @@ echo "Cellar — starting up …"
 mkdir -p /app/data /app/data/logs /data/repositories /var/log/nginx
 
 # ── .env from template ───────────────────────────
-if [ -f /app/.env.docker ]; then
-    cp /app/.env.docker /app/.env
+if [ ! -f /app/.env ]; then
+    if [ -f /app/.env.docker ]; then
+        cp /app/.env.docker /app/.env
+    elif [ -f /app/.env.example ]; then
+        cp /app/.env.example /app/.env
+    else
+        # Generate minimal .env
+        cat > /app/.env <<ENVFILE
+APP_NAME=Cellar
+APP_ENV=production
+APP_KEY=
+APP_DEBUG=false
+APP_URL=${APP_URL:-http://localhost:8420}
+DB_CONNECTION=sqlite
+DB_DATABASE=${DB_DATABASE:-/app/data/cellar.sqlite}
+REDIS_HOST=${REDIS_HOST:-redis}
+REDIS_PORT=${REDIS_PORT:-6379}
+REDIS_PASSWORD=${REDIS_PASSWORD:-}
+REDIS_DB=${REDIS_DB:-0}
+QUEUE_CONNECTION=redis
+CACHE_STORE=redis
+BROADCAST_CONNECTION=reverb
+REVERB_APP_ID=cellar
+REVERB_APP_KEY=cellar-key
+REVERB_APP_SECRET=cellar-secret
+REVERB_HOST=127.0.0.1
+REVERB_PORT=8080
+REVERB_SCHEME=http
+REVERB_SERVER_HOST=127.0.0.1
+REVERB_SERVER_PORT=8080
+ENVFILE
+        echo "→ Generated .env from defaults"
+    fi
 fi
 
 # ── Reverb runs locally inside the container ─────
@@ -70,10 +101,10 @@ fi
 sed -i "s|^REVERB_APP_KEY=.*|REVERB_APP_KEY=${REVERB_KEY}|" /app/.env
 sed -i "s|^REVERB_APP_SECRET=.*|REVERB_APP_SECRET=${REVERB_SECRET}|" /app/.env
 
-# Inject Reverb key into frontend SPA so Echo can connect
-SPA_INDEX="/app/public/spa/index.html"
-if [ -f "$SPA_INDEX" ]; then
-    sed -i "s|<head>|<head><script>window.__REVERB_KEY__=\"${REVERB_KEY}\";</script>|" "$SPA_INDEX"
+# Inject Reverb key into blade template so Echo can connect
+BLADE_FILE="/app/resources/views/app.blade.php"
+if [ -f "$BLADE_FILE" ]; then
+    sed -i "s|<head>|<head><script>window.__REVERB_KEY__=\"${REVERB_KEY}\";</script>|" "$BLADE_FILE"
 fi
 
 # ── SQLite database ─────────────────────────────

@@ -73,6 +73,7 @@ COPY resources/views/ resources/views/
 COPY routes/ routes/
 COPY storage/ storage/
 COPY artisan .
+COPY .env.example .
 
 RUN composer install --no-dev --optimize-autoloader --prefer-dist
 
