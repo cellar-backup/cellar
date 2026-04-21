@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.4](https://github.com/cellar-backup/cellar/compare/v0.13.3...v0.13.4) (2026-04-21)
+
+
+### Bug Fixes
+
+* entrypoint handles commented and missing env vars in .env ([#56](https://github.com/cellar-backup/cellar/issues/56)) ([7cbe425](https://github.com/cellar-backup/cellar/commit/7cbe42564c6127ba8d05b5113000f250034d8617))
+
 ## [0.13.3](https://github.com/cellar-backup/cellar/compare/v0.13.2...v0.13.3) (2026-04-21)
 
 
