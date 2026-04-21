@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/cellar-backup/cellar/compare/v0.12.3...v0.13.0) (2026-04-21)
+
+
+### Features
+
+* click database navigates to backups + database settings modal ([#48](https://github.com/cellar-backup/cellar/issues/48)) ([9fae77d](https://github.com/cellar-backup/cellar/commit/9fae77d297df35303836f83ac0cf8e55a490c98d))
+
 ## [0.12.3](https://github.com/cellar-backup/cellar/compare/v0.12.2...v0.12.3) (2026-04-21)
 
 
