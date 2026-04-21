@@ -24,7 +24,7 @@ services:
   cellar-api:
     build:
       context: .
-      dockerfile: docker/Dockerfile.api
+      dockerfile: docker/compose/Dockerfile.api
     restart: unless-stopped
     depends_on:
       cellar-redis:
@@ -56,7 +56,7 @@ services:
   cellar-worker:
     build:
       context: .
-      dockerfile: docker/Dockerfile.api
+      dockerfile: docker/compose/Dockerfile.api
     restart: unless-stopped
     command: php artisan horizon
     depends_on:
@@ -87,7 +87,7 @@ services:
   cellar-scheduler:
     build:
       context: .
-      dockerfile: docker/Dockerfile.api
+      dockerfile: docker/compose/Dockerfile.api
     restart: unless-stopped
     command: php artisan schedule:work
     depends_on:
@@ -109,7 +109,7 @@ services:
   cellar-reverb:
     build:
       context: .
-      dockerfile: docker/Dockerfile.api
+      dockerfile: docker/compose/Dockerfile.api
     restart: unless-stopped
     command: php artisan reverb:start --host=0.0.0.0 --port=8080
     depends_on:
@@ -143,7 +143,7 @@ services:
   cellar-ui:
     build:
       context: .
-      dockerfile: docker/Dockerfile.ui
+      dockerfile: docker/compose/Dockerfile.ui
     restart: unless-stopped
     depends_on:
       - cellar-api
@@ -155,7 +155,7 @@ services:
     ports:
       - "${CELLAR_PORT:-8420}:8420"
     volumes:
-      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./docker/compose/Caddyfile:/etc/caddy/Caddyfile:ro
       - cellar-caddy-data:/data
     depends_on:
       - cellar-ui
