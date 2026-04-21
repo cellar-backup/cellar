@@ -99,6 +99,7 @@ All variables have sensible defaults. Override only what you need:
 | `REDIS_HOST`               | `redis`                 | Redis hostname                     |
 | `REDIS_PORT`               | `6379`                  | Redis port                         |
 | `REDIS_PASSWORD`           | *(none)*                | Redis password (if auth enabled)   |
+| `TRUSTED_PROXIES`          | `*`                     | Trusted proxy IPs (`*` = trust all) |
 | `CELLAR_MAX_PARALLEL_JOBS` | `2`                     | Max concurrent backup/restore jobs |
 
 See [`.env.example`](.env.example) for the full list.

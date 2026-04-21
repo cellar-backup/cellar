@@ -103,6 +103,7 @@ RUN mkdir -p \
 ENV APP_ENV=production \
     APP_DEBUG=false \
     APP_URL=http://localhost:8420 \
+    TRUSTED_PROXIES=* \
     DB_CONNECTION=sqlite \
     DB_DATABASE=/app/data/cellar.sqlite \
     # Redis (external — set REDIS_HOST to your Redis instance)
