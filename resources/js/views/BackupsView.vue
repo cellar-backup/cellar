@@ -483,6 +483,7 @@ onUnmounted(() => window.removeEventListener("keydown", handleKeydown));
       :archive="selectedArchive"
       @close="selectedId = null"
       @pin-toggled="(id, val) => { const a = archives.find(x => x.id === id); if (a) a.keep_forever = val; }"
+      @restore="(archive) => { restoreTarget = archive; selectedId = null; }"
     />
 
     <!-- Advanced create modal -->
