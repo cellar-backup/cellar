@@ -1,44 +1,34 @@
 # Cellar — AI Project Reference
 
-> **Updated:** 2026-03-07 (v0.8.0)
+> **Generated:** 2026-04-21 (v0.12.0)
 > **Purpose:** Comprehensive project context for AI-assisted development.
-> **Local overrides:** See `AI.local.md` (gitignored) for machine-specific paths and credentials.
 
 ---
 
 ## 1. Overview
 
-**Cellar** is an open-source, container-native backup management platform for HomeLab operators. It provides deduplication-first backups (via BorgBackup), database + filesystem support, and a modern Vue 3 UI.
+**Cellar** is an open-source, container-native backup management platform. It provides deduplication-first backups (via BorgBackup/Restic), database + filesystem support, Kubernetes auto-discovery, and a modern Vue 3 SPA with a "Warm Wine Cellar" design system.
 
 - **Repo:** `github.com/cellar-backup/cellar`
 - **License:** Apache 2.0
 - **Default port:** 8420
-- **Default credentials:** `admin` / `admin` (seeded via `cellar:seed-defaults`, changed during setup wizard)
+- **Default credentials:** `admin` / `changeme` (seeded via `php artisan db:seed`)
 
 ### Architecture (unified single container)
 
 All services run inside one container via supervisord:
 
-| Process         | Role              | Stack                          |
-| --------------- | ----------------- | ------------------------------ |
-| **nginx**       | Reverse proxy     | Nginx (port 8420)              |
-| **api**         | REST API          | PHP 8.4 + Laravel 12 + Sanctum |
-| **horizon**     | Async job runner  | Laravel Horizon + Redis        |
-| **scheduler**   | Cron scheduler    | Laravel Scheduler              |
-| **reverb**      | WebSocket server  | Laravel Reverb                 |
+| Process       | Role             | Stack                          |
+|---------------|------------------|--------------------------------|
+| **nginx**     | Reverse proxy    | Nginx (port 8420)              |
+| **api**       | REST API + SPA   | PHP 8.5 + Laravel 12 + Sanctum |
+| **horizon**   | Async job runner | Laravel Horizon + Redis        |
+| **scheduler** | Cron scheduler   | Laravel Scheduler              |
+| **reverb**    | WebSocket server | Laravel Reverb                 |
 
 **External dependency:** Redis (required) — queue, cache, WebSocket pub/sub.
 
 **Database:** SQLite by default (zero config). PostgreSQL available via Docker Compose overlay.
-
-### Roadmap
-
-| Phase      | Version   | Status | Focus                                                          |
-| ---------- | --------- | ------ | -------------------------------------------------------------- |
-| Foundation | v0.1–v0.3 | Done   | Core backup/restore, Borg engine, local repos, basic UI        |
-| Expansion  | v0.4–v0.7 | Done   | Real-time WebSocket UI, database dumpers, retention policies, profiles, setup wizard |
-| Polish     | v0.8      | Now    | Timezone-aware scheduling, source health checks, kubectl connectivity, default profiles, system settings |
-| Release    | v0.9–v1.0 | Next   | Multi-user RBAC, audit log, notifications, restic engine, metrics dashboard, mobile views |
 
 ---
 
@@ -46,301 +36,292 @@ All services run inside one container via supervisord:
 
 ```
 cellar/
-├── AI.md                 # This file
-├── AI.local.md           # Local/private context (gitignored)
-├── CLAUDE.md             # Points to AI.md (gitignored)
-├── README.md
-├── .github/workflows/ci.yml  # CI pipeline
-├── Makefile
-├── docker-compose.yml
+├── AI.md                       # This file
+├── CLAUDE.md                   # Points to AI.md
+├── Makefile                    # Dev shortcuts
+├── docker-compose.yml          # Multi-container dev setup
+├── vite.config.ts              # Vite + laravel-vite-plugin
+├── tsconfig.json               # TypeScript config
+├── package.json                # Node dependencies (frontend)
+├── composer.json               # PHP dependencies (backend)
+├── artisan                     # Laravel CLI entrypoint
 │
-├── backend/              # Laravel 12 project
-│   ├── app/
-│   │   ├── Console/Commands/   # 3 Artisan commands
-│   │   ├── Enums/              # 8 PHP backed enums
-│   │   ├── Events/             # JobUpdated broadcast event
-│   │   ├── Http/Controllers/Api/V1/  # 13 controllers
-│   │   ├── Jobs/               # 4 queue jobs
-│   │   ├── Models/             # 12 Eloquent models
-│   │   ├── Observers/          # JobObserver
-│   │   ├── Providers/          # AppServiceProvider
-│   │   └── Services/
-│   │       ├── DatabaseDumper.php
-│   │       ├── DatabaseInspector.php
-│   │       ├── DatabaseRestorer.php
-│   │       ├── JobLogger.php
-│   │       ├── KubernetesDiscovery.php
-│   │       └── Engines/
-│   │           ├── BackupEngine.php  (interface)
-│   │           └── BorgEngine.php    (implementation)
-│   ├── config/cellar.php       # Cellar-specific config
-│   ├── database/migrations/    # 18 migration files
-│   └── routes/
-│       ├── api.php             # API routes (v1, Sanctum auth)
-│       ├── channels.php        # WebSocket channel auth
-│       └── console.php         # Scheduler + cron helpers
+├── app/                        # PHP application
+│   ├── Console/Commands/       # 3 Artisan commands
+│   ├── Enums/                  # 8 PHP backed enums
+│   ├── Events/                 # JobUpdated broadcast event
+│   ├── Http/Controllers/Api/V1/  # 13 controllers
+│   ├── Jobs/                   # 4 queue jobs (backup, prune, restore, verify)
+│   ├── Models/                 # 12 Eloquent models
+│   ├── Observers/              # JobObserver (broadcasts on create/update)
+│   ├── Providers/              # AppServiceProvider
+│   └── Services/               # Core business logic
+│       ├── DatabaseDumper.php
+│       ├── DatabaseInspector.php
+│       ├── DatabaseRestorer.php
+│       ├── JobLogger.php
+│       ├── KubernetesDiscovery.php
+│       └── Engines/
+│           ├── BackupEngine.php  (interface)
+│           └── BorgEngine.php    (implementation)
 │
-├── frontend/             # Vue 3 SPA
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── layout/AppSidebar.vue  # Global sidebar + WebSocket subscription
-│   │   │   ├── ConfirmModal.vue
-│   │   │   └── JobLogModal.vue
-│   │   ├── composables/useConfirm.ts
-│   │   ├── lib/
-│   │   │   ├── api.ts          # Axios instance with auth interceptors
-│   │   │   ├── echo.ts         # Laravel Echo (Reverb) client
-│   │   │   └── utils.ts
-│   │   ├── router/index.ts     # Vue Router with auth guards
-│   │   ├── stores/             # 5 Pinia stores
-│   │   │   ├── auth.ts
-│   │   │   ├── plans.ts
-│   │   │   ├── radar.ts
-│   │   │   ├── settings.ts
-│   │   │   └── sources.ts
-│   │   └── views/              # 10 view components
-│   │       ├── SetupView.vue        # First-time setup wizard
-│   │       ├── DashboardView.vue
-│   │       ├── SourcesView.vue
-│   │       ├── PlansView.vue
-│   │       ├── ArchivesView.vue
-│   │       ├── JobsView.vue
-│   │       ├── RadarView.vue
-│   │       ├── SettingsView.vue     # System + Retention + Schedule tabs
-│   │       ├── LoginView.vue
-│   │       └── LogsView.vue
-│   └── vite.config.ts
+├── config/cellar.php           # Cellar-specific config
+├── database/migrations/        # 18 migration files
+├── routes/
+│   ├── api.php                 # API routes (v1, Sanctum auth)
+│   ├── web.php                 # SPA catch-all route
+│   ├── channels.php            # WebSocket channel auth
+│   └── console.php             # Scheduler + cron logic
+│
+├── resources/
+│   ├── js/                     # Vue 3 SPA source
+│   │   ├── app.ts             # Entry point
+│   │   ├── App.vue            # Root component
+│   │   ├── components/        # 9 UI components
+│   │   ├── composables/       # 7 composables (theme, toast, activeDb, etc.)
+│   │   ├── lib/               # API client, Echo, utilities
+│   │   ├── router/            # Vue Router with auth guards
+│   │   ├── stores/            # 5 Pinia stores
+│   │   └── views/             # 11 view components
+│   ├── css/app.css            # Tailwind + design system tokens
+│   └── views/app.blade.php    # Laravel Blade SPA shell
+│
+├── public/                     # Web root (served by nginx)
+│   ├── build/                  # Vite output (gitignored)
+│   └── logo.svg
 │
 └── docker/
     ├── unified/
     │   ├── Dockerfile          # Multi-stage: Node build + PHP runtime
     │   ├── entrypoint.sh       # Migrations + seed on boot
-    │   ├── nginx.conf          # SPA + API proxy + WebSocket proxy
+    │   ├── nginx.conf          # Assets + Laravel proxy + WebSocket
     │   └── supervisord.conf    # All 5 processes
-    ├── kubernetes/cellar.yaml  # Sample K8s manifest
-    └── docker-compose.postgres.yml  # PostgreSQL overlay
+    └── kubernetes/cellar.yaml  # Sample K8s manifest
 ```
 
 ---
 
-## 3. CI Pipeline
+## 3. Environment & Configuration
 
-**File:** `.github/workflows/ci.yml`
+**File:** `.env` (copied from `.env.example`)
 
-Triggers: push to `main`, push tags `v*`, PRs to `main`.
-
-| Job      | Runs                                              | When                      |
-| -------- | ------------------------------------------------- | ------------------------- |
-| Backend  | PHP 8.4, Composer, `php artisan test` (SQLite)    | Always                    |
-| Frontend | Node 20, `vue-tsc --noEmit`, `vite build`         | Always                    |
-| Docker   | Build & push to `ghcr.io/cellar-backup/cellar`    | Push to main or version tag |
-
-Docker tags: `latest` (on main), `0.9.0` (on `v0.9.0` tag), `sha-xxxxx`, branch name.
-
----
-
-## 4. Key Patterns
-
-### WebSocket (Real-time updates)
-
-- **Server:** Laravel Reverb (internal port 8080, proxied via nginx at `/app/{id}`)
-- **Client:** Laravel Echo + Pusher.js in `frontend/src/lib/echo.ts`
-- **Channel:** `jobs` (public) — broadcasts `JobUpdated` events on job create/update
-- **Subscription:** Single global listener in `AppSidebar.vue` — do NOT subscribe per-view (causes channel teardown on navigation)
-- **Store handler:** `plansStore.handleJobEvent(event)` uses `patchArray()` for reactive updates
-
-### Pinia Stores
-
-- `patchArray()` utility for in-place reactive array updates (match by `id`, update existing or push new)
-- Sorted views use `computed()` (e.g., `sortedSources` sorts by `display_label`)
-
-### Database & Auth
-
-- All models use UUID primary keys (`HasUuids` trait)
-- Encrypted-at-rest: repo configs, source passwords, kubeconfig files (`encrypted` / `encrypted:array` casts)
-- Sanctum Bearer tokens stored in `localStorage("cellar_access_token")`
-
-### Scheduler (routes/console.php)
-
-- Timezone-aware: `cellarTimezone()` reads from `AppSetting('timezone')` with try/catch (safe during Docker build)
-- `cronMatchesNow()` and `nextCronRun()` pass timezone to `CronExpression`
-- Prune runs 30 minutes after each backup cron via `shiftCronMinutes()`
-- Daily tasks: `sync-archives` at 03:00, `cleanup-job-logs` at 04:00
-- Health checks: `check-source-health` every 15 minutes
-
-### Profiles & Settings
-
-- `Profile` model: reusable retention and schedule presets with `is_default` flag
-- `AppSetting` model: key-value store for system settings (timezone, max_parallel_jobs, app_url)
-- `AppServiceProvider::boot()` overrides Horizon `maxProcesses` from `AppSetting` at runtime
-- Default profiles seeded by `cellar:seed-defaults`: "Standard" retention + "Daily at 02:00" schedule
-
-### Source Health
-
-- `Source::checkConnection()` routes through kubectl exec when `dump_method: 'kubectl'`
-- `cellar:check-source-health` command runs every 15 minutes, updates `health_status` and `last_health_check`
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `APP_URL` | `http://localhost:8420` | Public URL |
+| `DB_CONNECTION` | `sqlite` | Database driver |
+| `DB_DATABASE` | `/app/data/cellar.sqlite` | SQLite path |
+| `REDIS_HOST` | `redis` | Redis for queue/cache |
+| `QUEUE_CONNECTION` | `redis` | Job queue driver |
+| `CELLAR_MAX_PARALLEL_JOBS` | `2` | Concurrent job limit |
+| `CELLAR_ADMIN_PASSWORD` | _(none)_ | Initial admin password |
+| `REVERB_HOST` | `127.0.0.1` | WebSocket server host |
+| `REVERB_PORT` | `8080` | WebSocket server port |
 
 ---
 
-## 5. API Routes — `routes/api.php`
+## 4. Key Dependencies
 
-All routes prefixed with `/api/v1`. Auth uses Laravel Sanctum tokens.
+### Backend (PHP)
+
+| Package | Purpose |
+|---------|---------|
+| `laravel/framework` 12.x | Core framework |
+| `laravel/horizon` | Redis queue dashboard & worker |
+| `laravel/reverb` | WebSocket server (Pusher protocol) |
+| `laravel/sanctum` | Bearer token authentication |
+
+### Frontend (Node)
+
+| Package | Purpose |
+|---------|---------|
+| `vue` 3.5 | UI framework |
+| `pinia` 3.x | State management |
+| `vue-router` 5.x | Client-side routing |
+| `axios` | HTTP client |
+| `laravel-echo` + `pusher-js` | WebSocket client |
+| `tailwindcss` 4.x | Utility CSS |
+| `lucide-vue-next` | Icons |
+| `radix-vue` | Accessible primitives |
+| `laravel-vite-plugin` | Laravel-Vite integration |
+
+---
+
+## 5. API Routes
+
+All routes prefixed with `/api/v1`. Auth uses Laravel Sanctum Bearer tokens.
 
 ### Public
 
-| Method | Path            | Controller/Action         |
-| ------ | --------------- | ------------------------- |
-| POST   | `auth/login`    | `AuthController@login`    |
-| POST   | `setup`         | `SetupController@store`   |
-| GET    | `system/health` | `SystemController@health` |
+| Method | Path | Action |
+|--------|------|--------|
+| POST | `auth/login` | `AuthController@login` |
+| POST | `setup` | `SetupController@store` |
+| GET | `system/health` | `SystemController@health` |
 
-### Authenticated (Sanctum)
+### Authenticated
 
-| Method | Path                                          | Controller/Action                     |
-| ------ | --------------------------------------------- | ------------------------------------- |
-| POST   | `auth/logout`                                 | `AuthController@logout`               |
-| GET    | `auth/me`                                     | `AuthController@me`                   |
-| CRUD   | `repositories`                                | `RepositoryController` (apiResource)  |
-| POST   | `repositories/{id}/test`                      | `RepositoryController@test`           |
-| POST   | `repositories/{id}/import`                    | `RepositoryController@import`         |
-| CRUD   | `sources`                                     | `SourceController` (apiResource)      |
-| POST   | `sources/quick-add`                           | `SourceController@quickAdd`           |
-| POST   | `sources/{id}/test-connection`                | `SourceController@testConnection`     |
-| PATCH  | `sources/{id}/toggle`                         | `SourceController@toggle`             |
-| PATCH  | `sources/{id}/retention`                      | `SourceController@updateRetention`    |
-| PATCH  | `sources/{id}/dump-method`                    | `SourceController@updateDumpMethod`   |
-| GET    | `sources/{id}/policies`                       | `SourceController@policies`           |
-| GET    | `sources/{id}/archives`                       | `SourceController@archives`           |
-| CRUD   | `plans`                                       | `BackupPlanController` (apiResource)  |
-| POST   | `plans/{id}/backup`                           | `BackupPlanController@backup`         |
-| POST   | `plans/{id}/restore`                          | `BackupPlanController@restore`        |
-| POST   | `plans/{id}/prune`                            | `BackupPlanController@prune`          |
-| POST   | `plans/{id}/verify`                           | `BackupPlanController@verify`         |
-| PATCH  | `plans/{id}/toggle`                           | `BackupPlanController@toggle`         |
-| GET    | `jobs`                                        | `JobController@index`                 |
-| GET    | `jobs/{id}`                                   | `JobController@show`                  |
-| GET    | `jobs/{id}/log`                               | `JobController@log`                   |
-| POST   | `jobs/{id}/cancel`                            | `JobController@cancel`                |
-| GET    | `archives`                                    | `ArchiveController@index`             |
-| GET    | `archives/{id}`                               | `ArchiveController@show`              |
-| PATCH  | `archives/{id}`                               | `ArchiveController@update`            |
-| DELETE | `archives/{id}`                               | `ArchiveController@destroy`           |
-| PATCH  | `archives/{id}/keep-forever`                  | `ArchiveController@keepForever`       |
-| POST   | `archives/{id}/restore`                       | `ArchiveController@restore`           |
-| GET    | `archives/{id}/download`                      | `ArchiveController@download`          |
-| CRUD   | `notifications`                               | `NotificationChannelController`       |
-| CRUD   | `documents`                                   | `DocumentController`                  |
-| CRUD   | `profiles`                                    | `ProfileController`                   |
-| GET    | `settings`                                    | `SettingsController@index`            |
-| PUT    | `settings`                                    | `SettingsController@update`           |
-| GET    | `kubernetes/clusters`                         | `KubernetesController@clusters`       |
-| POST   | `kubernetes/clusters`                         | `KubernetesController@storeCluster`   |
-| PUT    | `kubernetes/clusters/{id}`                    | `KubernetesController@updateCluster`  |
-| DELETE | `kubernetes/clusters/{id}`                    | `KubernetesController@destroyCluster` |
-| POST   | `kubernetes/clusters/{id}/test`               | `KubernetesController@test`           |
-| POST   | `kubernetes/clusters/{id}/discover`           | `KubernetesController@discover`       |
-| GET    | `kubernetes/clusters/{id}/namespaces`         | `KubernetesController@namespaces`     |
-| POST   | `kubernetes/clusters/{id}/import`             | `KubernetesController@import`         |
-| POST   | `kubernetes/clusters/{id}/ignore`             | `KubernetesController@ignore`         |
-| GET    | `kubernetes/clusters/{id}/ignored`            | `KubernetesController@ignored`        |
-| DELETE | `kubernetes/clusters/{id}/ignored/{ignoreId}` | `KubernetesController@unignore`       |
-| POST   | `kubernetes/clusters/{id}/list-databases`     | `KubernetesController@listDatabases`  |
+| Method | Path | Action |
+|--------|------|--------|
+| POST | `auth/logout` | Logout |
+| GET | `auth/me` | Current user |
+| CRUD | `sources` | Source management |
+| POST | `sources/quick-add` | One-step database + plan creation |
+| POST | `sources/{id}/test-connection` | Test connectivity |
+| PATCH | `sources/{id}/toggle` | Enable/disable |
+| GET | `sources/{id}/policies` | List plans for source |
+| GET | `sources/{id}/archives` | List backups for source |
+| CRUD | `plans` | Backup plan management |
+| POST | `plans/{id}/backup` | Trigger backup |
+| POST | `plans/{id}/prune` | Trigger prune |
+| POST | `plans/{id}/verify` | Trigger verify |
+| GET | `jobs` | Job history |
+| GET | `jobs/{id}/log` | Job log output |
+| POST | `jobs/{id}/cancel` | Cancel running job |
+| CRUD | `archives` | Backup archive management |
+| PATCH | `archives/{id}/keep-forever` | Pin/unpin |
+| POST | `archives/{id}/restore` | Restore from archive |
+| GET | `archives/{id}/download` | Download dump file |
+| CRUD | `profiles` | Schedule & retention presets |
+| GET/PUT | `settings` | System settings |
+| POST | `kubernetes/clusters/{id}/discover` | K8s resource discovery |
+| POST | `kubernetes/clusters/{id}/import` | Import discovered sources |
 
 ---
 
-## 6. Enums
-
-| Enum          | Values                                                                                     |
-| ------------- | ------------------------------------------------------------------------------------------ |
-| `BackendType` | local, s3, b2, r2, gcs, azure, sftp, smb, nfs, rclone                                     |
-| `ChannelType` | email, slack, discord, telegram, gotify, ntfy, apprise, webhook                             |
-| `EngineType`  | borg, restic                                                                               |
-| `JobStatus`   | pending, running, success, failed, cancelled                                                |
-| `JobType`     | backup, restore, export, prune, verify                                                     |
-| `PlanStatus`  | healthy, warning, failed, running, idle                                                    |
-| `RepoStatus`  | online, offline, degraded, unknown                                                         |
-| `SourceType`  | postgresql, mysql, mariadb, mongodb, sqlite, redis, directory, docker_volume. Methods: `isDatabase()`, `defaultPort()` |
-
----
-
-## 7. Models (12)
+## 6. Data Models (12)
 
 All models use UUID primary keys (`HasUuids` trait).
 
-| Model               | Table                  | Key Relations & Notes                                                           |
-| -------------------- | ---------------------- | ------------------------------------------------------------------------------- |
-| `User`               | users                  | Sanctum tokens, hashed password cast                                            |
-| `Repository`         | repositories           | `config` encrypted:array, hasMany BackupPlan                                    |
-| `Source`             | sources                | `password` encrypted, auto-default retention from Profile on save, hasMany BackupPlan |
-| `BackupPlan`         | backup_plans           | belongsTo Source + Repository, hasMany Job + Archive                            |
-| `Job`                | backup_jobs            | belongsTo BackupPlan, `progress` (0-100), broadcast via JobObserver             |
-| `Archive`            | archives               | belongsTo BackupPlan, tags/notes, keep_forever pin                              |
-| `Profile`            | profiles               | type: retention/schedule, `is_default` flag, scopes: `retention()`, `schedule()` |
-| `AppSetting`         | app_settings           | key-value store, static `get()`/`set()` helpers                                 |
-| `NotificationChannel`| notification_channels  | belongsTo BackupPlan, `config` encrypted:array                                 |
-| `CustomDocument`     | custom_documents       | User-defined backup/restore commands                                            |
-| `RadarCluster`       | radar_clusters         | `kubeconfig` encrypted, hasMany RadarIgnore                                     |
-| `RadarIgnore`        | radar_ignores          | belongsTo RadarCluster, `resource_key` unique                                   |
+| Model | Key Fields | Relationships |
+|-------|-----------|---------------|
+| `User` | username, email, password (hashed) | Sanctum tokens |
+| `Repository` | name, backend_type, config (encrypted) | hasMany BackupPlan |
+| `Source` | name, source_type, host, port, password (encrypted), enabled | hasMany BackupPlan |
+| `BackupPlan` | schedule_cron, retention_policy, engine | belongsTo Source + Repository |
+| `Job` | job_type, status, progress (0-100) | belongsTo BackupPlan |
+| `Archive` | archive_id, timestamp, size_*, file_count, keep_forever | belongsTo BackupPlan |
+| `Profile` | type (schedule/retention), config, is_default | Scopes: retention(), schedule() |
+| `AppSetting` | key, value | Static get()/set() helpers |
+| `RadarCluster` | name, kubeconfig (encrypted) | hasMany RadarIgnore |
 
 ---
 
-## 8. Queue Jobs
+## 7. Frontend Architecture
 
-All queued via Redis/Horizon. Create a `Job` record, update plan status, broadcast progress via `JobUpdated` event.
+### Design System — "Warm Wine Cellar"
 
-| Job          | Timeout | Flow                                                                                   |
-| ------------ | ------- | -------------------------------------------------------------------------------------- |
-| `RunBackup`  | 8h      | Init borg repo → estimate DB size → dump with progress polling → `borg create` → Archive record |
-| `RunPrune`   | 1h      | `borg prune` with retention policy → reconcile Archive records                          |
-| `RunRestore` | 2h      | `borg extract` → find dump file → restore via DatabaseRestorer                          |
-| `RunVerify`  | 1h      | `borg check` on repo or specific archive                                                |
+- **Colors:** OKLCH-based — burgundy primary, oak mid-tones, cream paper (light), smoky charcoal (dark)
+- **Typography:** DM Serif Display (headings), Geist (UI), Geist Mono (data)
+- **Motion:** Spring animations, pour-in reveals, pulse dots, configurable (full/subtle/none)
+- **Themes:** Dark (default) + Light, toggled via `data-theme` attribute
 
----
+### Views
 
-## 9. Services
+| Route | Component | Purpose |
+|-------|-----------|---------|
+| `/` | BackupsView | Timeline/list of backups for active database |
+| `/schedule` | ScheduleView | Per-database backup schedule + countdown |
+| `/jobs` | JobsView | Job history table with progress |
+| `/storage` | StorageView | Donut chart + per-database breakdown |
+| `/radar` | RadarView | Kubernetes cluster discovery |
+| `/settings` | SettingsView | System, retention profiles, schedule profiles, appearance |
+| `/login` | LoginView | Authentication |
+| `/setup` | SetupView | First-time setup wizard |
 
-| Service              | Purpose                                                                                    |
-| -------------------- | ------------------------------------------------------------------------------------------ |
-| `DatabaseDumper`     | pg_dump / mysqldump with progress tracking (non-blocking `Process::start()` + size polling) |
-| `DatabaseRestorer`   | pg_restore / psql / mysql CLI, auto-detects dump format                                     |
-| `DatabaseInspector`  | Lists databases via direct PDO or kubectl exec fallback                                     |
-| `BorgEngine`         | Wraps borg CLI (`--json` output), implements `BackupEngine` interface                       |
-| `KubernetesDiscovery`| Auto-discovers DBs and PVCs in K8s clusters, deduplication, credential discovery            |
-| `JobLogger`          | Per-job log files in `/var/log/cellar/jobs/`, with cleanup (30-day retention)                |
+### Key Patterns
 
----
-
-## 10. Docker (Unified)
-
-**Image:** `ghcr.io/cellar-backup/cellar:latest`
-
-Multi-stage build: Node 20 (frontend) → PHP 8.4 (runtime with borg, restic, kubectl, DB clients, nginx, supervisor).
-
-**Volumes:** `/app/data` (SQLite + app key), `/data/repositories` (borg repos).
-
-**Entrypoint:** creates dirs → persists APP_KEY → creates SQLite → runs migrations → seeds defaults → starts supervisord.
-
-**Required env:** `REDIS_HOST` (everything else has sensible defaults).
+- **Active database:** Shared via `useActiveDatabase` composable — sidebar sets it, views consume it
+- **WebSocket:** Single global listener in `AppSidebar.vue` on `jobs` channel
+- **Toasts:** Global `useToast` composable + `ToastStack` component in App.vue
+- **Theme:** `useTheme` composable syncs `data-theme`/`data-motion` to `<body>` + localStorage
 
 ---
 
-## 11. Key Design Decisions
+## 8. Background Jobs
 
-1. **Single container** — supervisord manages nginx, PHP, Horizon, Scheduler, Reverb. Simplifies HomeLab deployment.
-2. **SQLite default** — Zero-config. PostgreSQL available as overlay.
-3. **UUID primary keys** — All domain models for portability.
-4. **Encrypted-at-rest** — Repo configs, passwords, kubeconfigs via Laravel `encrypted` casts.
-5. **Borg-first** — `BackupEngine` interface for future restic support, but MVP is BorgBackup only.
-6. **Timezone-aware scheduling** — All cron evaluation uses configured timezone from AppSetting.
-7. **Single WebSocket subscription** — AppSidebar owns the Echo channel; views must NOT subscribe independently.
-8. **Profile-driven defaults** — New sources inherit retention/schedule from default Profile, not hardcoded values.
-9. **kubectl exec for connectivity** — Sources with `dump_method: 'kubectl'` test connectivity via pod exec, matching the backup path.
-10. **Runtime config override** — `AppServiceProvider::boot()` reads DB settings and overrides Horizon config without restart.
+| Job | Timeout | Flow |
+|-----|---------|------|
+| `RunBackup` | 8h | Init repo → estimate size → dump → create archive → record |
+| `RunPrune` | 1h | Apply retention policy → reconcile archive records |
+| `RunRestore` | 2h | Extract archive → find dump → restore via DatabaseRestorer |
+| `RunVerify` | 1h | Check repo/archive integrity |
+
+### Scheduler (routes/console.php)
+
+- Every minute: dispatch scheduled backups/prunes based on plan cron expressions
+- Daily 03:00: sync archives with repository
+- Every 15 min: check source health connectivity
+- Daily 04:00: cleanup old job logs (30 day retention)
 
 ---
 
-## 12. Database Migrations
+## 9. Infrastructure
 
-**Convention:** Filenames use actual creation date: `YYYY_MM_DD_NNNNNN_description.php`. First 4 are Laravel framework defaults (`0001_01_01_*`).
+### Docker (unified image)
 
-18 migration files covering: users, cache, queue, Sanctum tokens, repositories, sources, backup_plans, backup_jobs, archives, notification_channels, custom_documents, radar_ignores, radar_clusters, job progress, archive tags/notes, source retention, profiles + app_settings, source health fields.
+- **Base:** `php:8.5-cli` + nginx + supervisor
+- **Build:** Multi-stage (Node for frontend, PHP for backend)
+- **Port:** 8420
+- **Volumes:** `/app/data` (SQLite + key), `/data/repositories` (backup repos)
+- **External:** Redis required
+
+### CI/CD (.github/workflows/ci.yml)
+
+| Job | Runs | Trigger |
+|-----|------|---------|
+| Backend | Pint + PHPUnit | Always |
+| Frontend | ESLint + vue-tsc + Vite build | Always |
+| Security | composer audit + npm audit | Always |
+| Container Scan | Trivy (CRITICAL/HIGH) | PRs only |
+| Docker Build | Build + push to GHCR | Push to main/tags |
+| Release | GitHub Release | Version tags |
+
+### Image registry
+
+`ghcr.io/cellar-backup/cellar` — tagged with semver, SHA, `latest`
+
+---
+
+## 10. Build & Dev Commands
+
+```bash
+# Development
+make dev              # Start Vite + Laravel serve
+php artisan serve     # Start Laravel API on :8000
+npm run dev           # Start Vite dev server
+
+# Build
+npm run build         # Build frontend → public/build/
+make build-frontend   # Same
+
+# Quality
+npm run type-check    # vue-tsc --noEmit
+npm run lint          # ESLint
+vendor/bin/pint       # PHP code style
+php artisan test      # PHPUnit
+
+# Database
+php artisan migrate              # Run migrations
+php artisan db:seed              # Seed admin user
+php artisan db:seed --class=DemoSeeder  # Seed demo data
+
+# Docker
+docker compose up -d             # Start dev environment
+make up / make down / make logs  # Docker shortcuts
+```
+
+---
+
+## 11. Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Monolithic Laravel structure | Single codebase, unified deploys, Vite integration |
+| SQLite default | Zero-config for HomeLab operators, one volume to backup |
+| UUID primary keys | Safe for distributed/replicated setups |
+| BorgBackup engine | Best-in-class deduplication for homelab-scale data |
+| Single container | Simplest deployment — one image, one port, two volumes |
+| Redis required | Reliable queue + pub/sub for WebSocket broadcasting |
+| Sanctum tokens | Simple bearer auth, stored in localStorage |
+| OKLCH color system | Perceptually uniform, better dark/light theme control |
+| laravel-vite-plugin | Native Laravel asset pipeline, no separate frontend server in prod |

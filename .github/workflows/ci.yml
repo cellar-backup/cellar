@@ -23,9 +23,6 @@ jobs:
   backend:
     name: Backend (PHP)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
 
     steps:
       - uses: actions/checkout@v6
@@ -45,7 +42,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-composer-${{ hashFiles('backend/composer.lock') }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
           restore-keys: ${{ runner.os }}-composer-
 
       - name: Install dependencies
@@ -66,9 +63,6 @@ jobs:
   frontend:
     name: Frontend (Vue)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
 
     steps:
       - uses: actions/checkout@v6
@@ -78,7 +72,7 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -109,15 +103,13 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Composer audit
-        working-directory: backend
         run: composer audit --format=plain
 
       - name: npm audit
-        working-directory: frontend
-        run: npm audit --audit-level=high  # fail on high+
+        run: npm audit --audit-level=high
 
   # ---------- Container scan ----------
   container-scan:

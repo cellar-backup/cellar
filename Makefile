@@ -3,7 +3,7 @@
 # =============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: help up down build logs shell frontend-shell migrate artisan lint test clean
+.PHONY: help up down build logs shell migrate artisan lint format typecheck test clean dev
 
 # --- Docker Compose -----------------------------------------------------------
 
@@ -21,55 +21,61 @@ logs: ## Tail logs from all services
 
 # --- Development shortcuts ----------------------------------------------------
 
+dev: ## Start local development (Vite + Laravel)
+	php artisan serve & npm run dev
+
 shell: ## Open a shell in the API container
 	docker compose exec cellar-api bash
 
-frontend-shell: ## Open a shell in the UI container
-	docker compose exec cellar-ui sh
-
 migrate: ## Run Laravel migrations
-	docker compose exec cellar-api php artisan migrate
+	php artisan migrate
 
 artisan: ## Run any artisan command (usage: make artisan CMD="route:list")
-	docker compose exec cellar-api php artisan $(CMD)
+	php artisan $(CMD)
 
-seed: ## Seed default admin + repository
-	docker compose exec cellar-api php artisan cellar:seed-defaults
+seed: ## Seed default admin + demo data
+	php artisan db:seed
+	php artisan db:seed --class=DemoSeeder
 
 tinker: ## Open Laravel Tinker (interactive REPL)
-	docker compose exec cellar-api php artisan tinker
+	php artisan tinker
 
 horizon-status: ## Check Horizon queue status
-	docker compose exec cellar-api php artisan horizon:status
+	php artisan horizon:status
 
 # --- Code Quality -------------------------------------------------------------
 
-lint: ## Run linters
-	cd frontend && npm run lint
+lint: ## Run linters (ESLint + Pint)
+	npm run lint
+	vendor/bin/pint --test
 
-format: ## Auto-format frontend code
-	cd frontend && npm run format
+format: ## Auto-format code
+	npm run format
+	vendor/bin/pint
 
 typecheck: ## Run TypeScript type checker
-	cd frontend && npm run type-check
+	npm run type-check
 
 # --- Testing ------------------------------------------------------------------
 
-test: ## Run all tests
-	docker compose exec cellar-api php artisan test
-	cd frontend && npm run test
+test: test-backend test-frontend ## Run all tests
 
 test-backend: ## Run backend tests only
-	docker compose exec cellar-api php artisan test
+	php artisan test
 
 test-frontend: ## Run frontend tests only
-	cd frontend && npm run test
+	npm run test
+
+# --- Build --------------------------------------------------------------------
+
+build-frontend: ## Build frontend for production
+	npm run build
 
 # --- Maintenance --------------------------------------------------------------
 
 clean: ## Remove build artifacts, caches, temp files
-	find . -type d -name node_modules -exec rm -rf {} + 2>/dev/null || true
-	rm -rf frontend/dist backend/vendor
+	rm -rf node_modules vendor public/build
+	rm -rf storage/framework/cache/data/*
 
 # --- Help ---------------------------------------------------------------------
 

@@ -3,14 +3,14 @@
 # =============================================================================
 
 # ----- PHP / Laravel -----
-/backend/vendor/
-/backend/.env
-/backend/.env.backup
-/backend/storage/*.key
-/backend/storage/framework/cache/data/*
-/backend/storage/framework/sessions/*
-/backend/storage/framework/views/*
-/backend/bootstrap/cache/*
+/vendor/
+/.env
+/.env.backup
+/storage/*.key
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/bootstrap/cache/*
 *.log
 *.sqlite
 *.sqlite-journal
@@ -23,13 +23,10 @@ node_modules/
 .vite/
 
 # ----- Build outputs -----
-frontend/dist/
+/public/build/
+/public/hot
 docs/.vitepress/dist/
 docs/.vitepress/cache/
-
-# ----- Compiled TS/Vue duplicates -----
-frontend/src/**/*.js
-frontend/src/**/*.vue.js
 
 # ----- Docker -----
 docker-compose.override.yml
@@ -39,7 +36,6 @@ docker-compose.override.yml
 .env.local
 .env.*.local
 !.env.example
-!backend/.env.docker
 
 # ----- AI tools -----
 CLAUDE.md

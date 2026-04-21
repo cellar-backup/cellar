@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://github.com/cellar-backup/cellar/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/cellar-backup/cellar/ci.yml?branch=main&style=flat-square" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="License" /></a>
-  <a href="https://github.com/cellar-backup/cellar/releases"><img src="https://img.shields.io/github/v/release/cellar-backup/cellar?style=flat-square&color=6C5CE7" alt="Release" /></a>
+  <a href="https://github.com/cellar-backup/cellar/releases"><img src="https://img.shields.io/github/v/release/cellar-backup/cellar?style=flat-square&color=6B2D3A" alt="Release" /></a>
   <a href="https://github.com/cellar-backup/cellar/pkgs/container/cellar"><img src="https://img.shields.io/badge/ghcr.io-cellar--backup%2Fcellar-blue?style=flat-square&logo=docker" alt="Container" /></a>
 </p>
 
@@ -28,9 +28,9 @@ Existing backup tools force you to choose between **power** (borgmatic, restic C
 
 - **Deduplication-first** — powered by BorgBackup / restic, store only unique data blocks
 - **Database + filesystem** — native support for PostgreSQL, MySQL, MongoDB, SQLite, Redis, plus any directory or Docker volume
-- **Custom Backup Documents** — extend Cellar for any workload with simple YAML manifests
-- **Beautiful dark-mode UI** — a modern Vue 3 interface that makes you want to check your backups
-- **Single container** — one image, one port, one volume — deploy in seconds
+- **Kubernetes Radar** — auto-discover databases and volumes in your clusters
+- **Beautiful wine-themed UI** — a modern Vue 3 interface with dark/light themes, timeline views, and spring animations
+- **Single container** — one image, one port, two volumes — deploy in seconds
 
 ## Quick Start
 
@@ -50,9 +50,9 @@ docker run -d \
   ghcr.io/cellar-backup/cellar:latest
 ```
 
-Open **http://localhost:8420** — a setup wizard will guide you through creating your admin account and configuring your instance.
+Open **http://localhost:8420** — a setup wizard will guide you through creating your admin account.
 
-> **Tip:** Point `REDIS_HOST` to an existing Redis instance instead of running a separate one:
+> **Tip:** Point `REDIS_HOST` to an existing Redis instance:
 >
 > ```bash
 > docker run -d \
@@ -69,105 +69,75 @@ Open **http://localhost:8420** — a setup wizard will guide you through creatin
 
 Cellar ships as a **single unified container** that runs all services via supervisord:
 
-| Process         | Role              | Stack                          |
-| --------------- | ----------------- | ------------------------------ |
-| **nginx**       | Reverse proxy     | Nginx (port 8420)              |
-| **api**         | REST API          | PHP 8.4 + Laravel 11 + Sanctum |
-| **horizon**     | Async job runner  | Laravel Horizon                |
-| **scheduler**   | Cron scheduler    | Laravel Scheduler              |
-| **reverb**      | WebSocket server  | Laravel Reverb                 |
+| Process       | Role             | Stack                          |
+|---------------|------------------|--------------------------------|
+| **nginx**     | Reverse proxy    | Nginx (port 8420)              |
+| **api**       | REST API + SPA   | PHP 8.5 + Laravel 12 + Sanctum |
+| **horizon**   | Async job runner | Laravel Horizon + Redis        |
+| **scheduler** | Cron scheduler   | Laravel Scheduler              |
+| **reverb**    | WebSocket server | Laravel Reverb                 |
 
 **External dependencies:**
 
 - **Redis** (required) — queue, cache, and WebSocket pub/sub
-- **Database:** SQLite by default (zero config). PostgreSQL available via overlay — see [Advanced Deployment](#advanced-deployment).
+- **Database:** SQLite by default (zero config). PostgreSQL available via overlay.
 
 ## Volumes
 
-| Path                | Purpose                          |
-| ------------------- | -------------------------------- |
-| `/app/data`         | SQLite database, app key         |
-| `/data/repositories`| Backup repositories (borg/restic)|
+| Path                | Purpose                           |
+|---------------------|-----------------------------------|
+| `/app/data`         | SQLite database, app key          |
+| `/data/repositories`| Backup repositories (borg/restic) |
 
 ## Environment Variables
 
 All variables have sensible defaults. Override only what you need:
 
-| Variable                    | Default                    | Description                          |
-| --------------------------- | -------------------------- | ------------------------------------ |
-| `APP_URL`                   | `http://localhost:8420`    | Public URL for this instance         |
-| `REDIS_HOST`                | `redis`                   | Redis hostname                       |
-| `REDIS_PORT`                | `6379`                    | Redis port                           |
-| `REDIS_PASSWORD`            | *(none)*                  | Redis password (if auth enabled)     |
-| `CELLAR_MAX_PARALLEL_JOBS`  | `2`                       | Max concurrent backup/restore jobs   |
-| `SANCTUM_STATEFUL_DOMAINS`  | `localhost:8420,localhost` | Cookie auth domains (CORS)           |
+| Variable                   | Default                 | Description                        |
+|----------------------------|-------------------------|------------------------------------|
+| `APP_URL`                  | `http://localhost:8420` | Public URL for this instance       |
+| `REDIS_HOST`               | `redis`                 | Redis hostname                     |
+| `REDIS_PORT`               | `6379`                  | Redis port                         |
+| `REDIS_PASSWORD`           | *(none)*                | Redis password (if auth enabled)   |
+| `CELLAR_MAX_PARALLEL_JOBS` | `2`                     | Max concurrent backup/restore jobs |
 
 See [`.env.example`](.env.example) for the full list.
-
-## Advanced Deployment
-
-### Docker Compose
-
-For more control or PostgreSQL support, use Docker Compose:
-
-```bash
-git clone https://github.com/cellar-backup/cellar.git
-cd cellar
-cp .env.example .env    # edit as needed
-docker compose up -d
-```
-
-For PostgreSQL instead of SQLite:
-
-```bash
-docker compose -f docker-compose.yml -f docker/docker-compose.postgres.yml up -d
-```
-
-Set `CELLAR_DB_NAME`, `CELLAR_DB_USER`, and `CELLAR_DB_PASSWORD` in your `.env`.
-
-### Kubernetes
-
-A sample manifest is provided in [`docker/kubernetes/cellar.yaml`](docker/kubernetes/cellar.yaml). It deploys Cellar + Redis in a single namespace:
-
-```bash
-kubectl apply -f docker/kubernetes/cellar.yaml
-```
 
 ## Project Structure
 
 ```
 cellar/
-├── backend/          # Laravel project — API, Eloquent models, queue jobs
-│   ├── app/
-│   │   ├── Console/      # Artisan commands, scheduler
-│   │   ├── Enums/        # PHP 8.1+ backed enums
-│   │   ├── Http/         # Controllers, middleware
-│   │   ├── Jobs/         # Queue jobs (backup, restore, prune, verify)
-│   │   ├── Models/       # Eloquent models
-│   │   └── Services/     # Backup engines (Borg), DB dumper/restorer
-│   ├── config/           # Laravel + Cellar + Horizon config
-│   ├── database/         # Migrations
-│   └── routes/           # API routes, scheduler definitions
-├── frontend/         # Vue 3 SPA — UI components, stores, views
-└── docker/           # Dockerfiles, Nginx config, supervisord, entrypoint
+├── app/              # PHP application (controllers, models, services, jobs)
+├── config/           # Laravel + Cellar configuration
+├── database/         # Migrations and seeders
+├── routes/           # API routes, web (SPA catch-all), scheduler
+├── resources/
+│   ├── js/           # Vue 3 SPA (components, stores, views, composables)
+│   ├── css/          # Tailwind + design system tokens
+│   └── views/        # Blade template (SPA shell)
+├── public/           # Web root (Vite build output)
+├── docker/           # Dockerfile, nginx, supervisord, entrypoint
+├── vite.config.ts    # Vite + Laravel plugin
+└── package.json      # Node dependencies
 ```
 
 ## Development
 
 ```bash
-# Backend (PHP 8.4+, Composer)
-cd backend
+# Install dependencies
 composer install
+npm install
+
+# Set up environment
 cp .env.example .env
 php artisan key:generate
 php artisan migrate
-php artisan cellar:seed-defaults
-php artisan serve
+php artisan db:seed                        # Admin user
+php artisan db:seed --class=DemoSeeder     # Demo data (optional)
 
-# Frontend (Node 20+)
-cd frontend
-npm install
-npm run dev
+# Start dev servers
+php artisan serve     # Laravel API on :8000
+npm run dev           # Vite dev server with HMR
 ```
 
 ## Makefile
@@ -175,24 +145,44 @@ npm run dev
 Common commands are available via `make`:
 
 ```bash
-make up          # Start all containers
-make down        # Stop all containers
-make build       # Build Docker images
-make logs        # Tail container logs
-make shell       # Shell into the API container
-make migrate     # Run database migrations
-make seed        # Run default seeder
-make tinker      # Open Laravel Tinker REPL
+make dev             # Start both Vite + Laravel serve
+make up              # Start Docker Compose services
+make down            # Stop services
+make migrate         # Run database migrations
+make seed            # Seed admin + demo data
+make lint            # ESLint + Pint
+make typecheck       # TypeScript type checker
+make test            # Run all tests
+```
+
+## Advanced Deployment
+
+### Docker Compose
+
+```bash
+git clone https://github.com/cellar-backup/cellar.git
+cd cellar
+cp .env.example .env
+docker compose up -d
+```
+
+### Kubernetes
+
+A sample manifest is provided in [`docker/kubernetes/cellar.yaml`](docker/kubernetes/cellar.yaml):
+
+```bash
+kubectl apply -f docker/kubernetes/cellar.yaml
 ```
 
 ## Roadmap
 
-| Phase          | Version   | Status | Focus                                                          |
-| -------------- | --------- | ------ | -------------------------------------------------------------- |
-| **Foundation** | v0.1–v0.3 | Done   | Core backup/restore, Borg engine, local repos, basic UI        |
-| **Expansion**  | v0.4–v0.7 | Done   | Real-time WebSocket UI, database dumpers, retention policies, profiles, setup wizard |
-| **Polish**     | v0.8      | Now    | Timezone-aware scheduling, source health checks, kubectl connectivity, default profiles, system settings |
-| **Release**    | v0.9–v1.0 | Next   | Multi-user RBAC, audit log, notifications, restic engine, metrics dashboard, mobile views, v1.0 launch |
+| Phase          | Version    | Status | Focus |
+|----------------|------------|--------|-------|
+| **Foundation** | v0.1–v0.3  | Done   | Core backup/restore, Borg engine, local repos, basic UI |
+| **Expansion**  | v0.4–v0.7  | Done   | Real-time WebSocket, database dumpers, retention, profiles |
+| **Polish**     | v0.8–v0.11 | Done   | Health checks, scheduling, settings, Kubernetes Radar |
+| **Redesign**   | v0.12      | Now    | Wine-cellar UI, timeline views, storage dashboard |
+| **Release**    | v0.13–v1.0 | Next   | Multi-user RBAC, notifications, restic engine, mobile views |
 
 ## License
 
