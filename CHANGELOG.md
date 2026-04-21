@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/cellar-backup/cellar/compare/v0.13.0...v0.13.1) (2026-04-21)
+
+
+### Bug Fixes
+
+* add trusted proxies support for HTTPS behind reverse proxy ([#50](https://github.com/cellar-backup/cellar/issues/50)) ([a9188c8](https://github.com/cellar-backup/cellar/commit/a9188c87a67b0021e3cdf438e6f1e5f76eb8d547))
+
 ## [0.13.0](https://github.com/cellar-backup/cellar/compare/v0.12.3...v0.13.0) (2026-04-21)
 
 
