@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, computed } from "vue";
 import { usePlansStore, type Job } from "@/stores/plans";
 import { useSourcesStore } from "@/stores/sources";
 import { useConfirm } from "@/composables/useConfirm";
@@ -10,6 +10,7 @@ const store = usePlansStore();
 const sourcesStore = useSourcesStore();
 const { confirm } = useConfirm();
 
+const query = ref("");
 const now = ref(Date.now());
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -101,6 +102,17 @@ function resolveSourceName(job: Job): string {
   }
   return job.source_name || job.plan_name || "—";
 }
+
+const filteredJobs = computed(() => {
+  if (!query.value) return store.sortedJobs;
+  const q = query.value.toLowerCase();
+  return store.sortedJobs.filter((job: Job) => {
+    const source = resolveSourceName(job).toLowerCase();
+    const type = typeLabel(job.job_type).toLowerCase();
+    const status = job.status.toLowerCase();
+    return source.includes(q) || type.includes(q) || status.includes(q);
+  });
+});
 </script>
 
 <template>
@@ -110,6 +122,18 @@ function resolveSourceName(job: Job): string {
       <div class="header-title-block">
         <div class="header-title">Jobs</div>
         <div class="header-breadcrumb">all operations</div>
+      </div>
+      <div class="header-spacer" />
+      <div class="search-wrap">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="7" cy="7" r="5" />
+          <path d="M14 14l-3.5-3.5" />
+        </svg>
+        <input
+          v-model="query"
+          class="search-input"
+          placeholder="Filter by source, type, status…"
+        />
       </div>
     </header>
 
@@ -138,7 +162,7 @@ function resolveSourceName(job: Job): string {
         </div>
         <TransitionGroup name="job-row">
           <div
-            v-for="(job, idx) in store.sortedJobs"
+            v-for="(job, idx) in filteredJobs"
             :key="job.id"
             class="jobs-table-row"
             :style="{ '--idx': idx }"
@@ -217,10 +241,39 @@ function resolveSourceName(job: Job): string {
   border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
-  padding: 0 32px;
+  padding: 0 24px 0 32px;
+  gap: 16px;
   background: var(--color-background);
   flex-shrink: 0;
 }
+.header-spacer { flex: 1; }
+.search-wrap {
+  position: relative;
+  width: 260px;
+  display: flex;
+  align-items: center;
+}
+.search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--color-text-faint);
+  pointer-events: none;
+}
+.search-input {
+  width: 100%;
+  padding: 7px 12px 7px 32px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 13px;
+  transition: all var(--duration-fast) var(--ease-out);
+  outline: none;
+}
+.search-input:focus {
+  border-color: var(--color-wine);
+  box-shadow: 0 0 0 3px var(--color-wine-soft);
+}
+.search-input::placeholder { color: var(--color-text-faint); }
 .header-title-block {
   display: flex;
   align-items: baseline;

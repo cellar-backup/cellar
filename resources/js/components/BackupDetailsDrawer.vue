@@ -11,6 +11,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
   pinToggled: [id: string, keepForever: boolean];
+  restore: [archive: SourceArchive];
 }>();
 
 const sourcesStore = useSourcesStore();
@@ -67,9 +68,9 @@ async function handleDownload() {
   await sourcesStore.downloadArchive(props.archive.id);
 }
 
-async function handleRestore() {
+function handleRestore() {
   if (!props.archive) return;
-  await sourcesStore.restoreArchive(props.archive.id);
+  emit("restore", props.archive);
 }
 
 async function handleTogglePin() {

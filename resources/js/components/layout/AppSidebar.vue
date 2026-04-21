@@ -62,12 +62,24 @@ onMounted(() => {
     ".job.updated",
     (event: Record<string, unknown>) => {
       plansStore.handleJobEvent(event as never);
+      // Re-fetch sources when a job completes (imports create new sources)
+      const status = event.status as string;
+      if (status === "success" || status === "failed") {
+        sourcesStore.fetchSources();
+      }
     },
+  );
+
+  // Also listen for source changes (if backend broadcasts them)
+  echo.channel("sources").listen(
+    ".source.updated",
+    () => { sourcesStore.fetchSources(); },
   );
 });
 
 onUnmounted(() => {
   echo.leaveChannel("jobs");
+  echo.leaveChannel("sources");
 });
 
 // Auto-select first database if none selected
@@ -111,8 +123,12 @@ const groupedByType = computed(() => {
     if (!groups[type]) groups[type] = [];
     groups[type].push(source);
   }
-  // Sort group keys alphabetically
-  return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+  // Sort databases alphabetically within each group
+  for (const sources of Object.values(groups)) {
+    sources.sort((a, b) => a.display_label.localeCompare(b.display_label));
+  }
+  // Sort groups by number of objects (largest first)
+  return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
 });
 
 const totalSources = computed(() => sourcesStore.sources.length);
