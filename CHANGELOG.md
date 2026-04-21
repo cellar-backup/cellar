@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.3](https://github.com/cellar-backup/cellar/compare/v0.13.2...v0.13.3) (2026-04-21)
+
+
+### Bug Fixes
+
+* WebSocket connects on correct port behind reverse proxy ([#54](https://github.com/cellar-backup/cellar/issues/54)) ([8a3fdce](https://github.com/cellar-backup/cellar/commit/8a3fdce35749a56d35f8d85621135ff01b5439b1))
+
 ## [0.13.2](https://github.com/cellar-backup/cellar/compare/v0.13.1...v0.13.2) (2026-04-21)
 
 
