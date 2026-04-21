@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.5](https://github.com/cellar-backup/cellar/compare/v0.13.4...v0.13.5) (2026-04-21)
+
+
+### Bug Fixes
+
+* restore button in detail drawer now shows confirmation modal ([#58](https://github.com/cellar-backup/cellar/issues/58)) ([1fe2cca](https://github.com/cellar-backup/cellar/commit/1fe2cca3bbcde9ce73e3e0fe08b1578e1bd4f868))
+
 ## [0.13.4](https://github.com/cellar-backup/cellar/compare/v0.13.3...v0.13.4) (2026-04-21)
 
 
