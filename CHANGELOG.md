@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.3](https://github.com/cellar-backup/cellar/compare/v0.12.2...v0.12.3) (2026-04-21)
+
+
+### Bug Fixes
+
+* health endpoint returns 500 when Redis unreachable ([#45](https://github.com/cellar-backup/cellar/issues/45)) ([f043939](https://github.com/cellar-backup/cellar/commit/f043939df907e766aeec5ad5b230fd54a4079c57))
+
 ## [0.12.2](https://github.com/cellar-backup/cellar/compare/v0.12.1...v0.12.2) (2026-04-21)
 
 
