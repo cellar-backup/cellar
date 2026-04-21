@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.3](https://github.com/cellar-backup/cellar/compare/v0.14.2...v0.14.3) (2026-04-21)
+
+
+### Bug Fixes
+
+* trivy review correctly parses grouped dates and checks NVD status ([#80](https://github.com/cellar-backup/cellar/issues/80)) ([d35d3f4](https://github.com/cellar-backup/cellar/commit/d35d3f4405aec00e930fd0b5ae37926227030169))
+
 ## [0.14.2](https://github.com/cellar-backup/cellar/compare/v0.14.1...v0.14.2) (2026-04-21)
 
 
