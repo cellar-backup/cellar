@@ -13,10 +13,11 @@
 FROM node:25-alpine AS frontend-build
 
 WORKDIR /build
-COPY frontend/package.json frontend/package-lock.json* ./
+COPY package.json package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-COPY frontend/ .
+COPY vite.config.ts tsconfig.json env.d.ts ./
+COPY resources/ resources/
 RUN npm run build
 
 # ── Stage 2: Unified runtime ─────────────────────────────────
@@ -60,20 +61,32 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # ── PHP application ──────────────────────────────────────────
 WORKDIR /app
 
-COPY backend/composer.json backend/composer.lock ./
+COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
-COPY backend/ .
+COPY app/ app/
+COPY bootstrap/ bootstrap/
+COPY config/ config/
+COPY database/ database/
+COPY public/ public/
+COPY resources/views/ resources/views/
+COPY routes/ routes/
+COPY storage/ storage/
+COPY artisan .
+
 RUN composer install --no-dev --optimize-autoloader --prefer-dist
 
-# ── Frontend static files ────────────────────────────────────
-COPY --from=frontend-build /build/dist /app/public/spa
+# ── Frontend static files (built by Vite, goes into public/build/) ──
+COPY --from=frontend-build /build/public/build /app/public/build
 
 # ── Config files ─────────────────────────────────────────────
 COPY docker/unified/nginx.conf /etc/nginx/sites-available/default
 COPY docker/unified/supervisord.conf /etc/supervisor/conf.d/cellar.conf
 COPY docker/unified/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# ── Static assets ────────────────────────────────────────────
+COPY logo.svg /app/public/logo.svg
 
 # ── Directories & permissions ────────────────────────────────
 RUN mkdir -p \
