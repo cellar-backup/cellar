@@ -4,9 +4,9 @@
 
 version: 2
 updates:
-  # PHP / Composer (backend)
+  # PHP / Composer
   - package-ecosystem: "composer"
-    directory: "/backend"
+    directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -17,9 +17,9 @@ updates:
     commit-message:
       prefix: "chore(deps):"
 
-  # npm (frontend)
+  # npm (frontend in resources/js)
   - package-ecosystem: "npm"
-    directory: "/frontend"
+    directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
