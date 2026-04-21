@@ -31,7 +31,7 @@ jobs:
       - name: Auto-merge patch and minor updates
         if: steps.metadata.outputs.update-type != 'version-update:semver-major'
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr merge "${{ github.event.pull_request.number }}" \
             --auto --squash \
