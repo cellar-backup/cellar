@@ -14,7 +14,7 @@ Cellar uses [Release Please](https://github.com/googleapis/release-please) to au
 Before merging a release PR, verify:
 
 - [ ] `CHANGELOG.md` entries are accurate and well-worded
-- [ ] Version bumped in: `package.json`, `frontend/package.json`, `backend/composer.json`, `backend/config/cellar.php`
+- [ ] Version bumped in: `package.json`, `composer.json`, `config/cellar.php`
 - [ ] CI pipeline passes (backend tests, frontend lint + type-check + build, security audit, container scan)
 - [ ] No open CRITICAL/HIGH Trivy findings
 - [ ] Migration files (if any) are reviewed and tested against a fresh DB

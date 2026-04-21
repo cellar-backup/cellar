@@ -1,9 +1,9 @@
 # =============================================================================
 # Cellar API — Dockerfile
-# PHP 8.4 + Laravel 11 + Horizon (Redis queue)
+# PHP 8.5 + Laravel 12 + Horizon (Redis queue)
 # =============================================================================
 
-FROM php:8.4-cli AS base
+FROM php:8.5-cli AS base
 
 # System dependencies: borg, restic, DB clients, supervisor, kubectl
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && pecl install redis && docker-php-ext-enable redis \
     && rm -rf /var/lib/apt/lists/*
 
-# Install kubectl for Kubernetes Radar feature (pinned to avoid CVE-2026-25679 in <1.25.8/1.26.1)
+# Install kubectl for Kubernetes Radar feature
 ARG KUBECTL_VERSION=v1.35.3
 RUN curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/$(dpkg --print-architecture)/kubectl" \
     -o /usr/local/bin/kubectl \
@@ -34,14 +34,23 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 
-# Install PHP dependencies (download only — cached layer when lock unchanged)
-COPY backend/composer.json backend/composer.lock ./
+# Install PHP dependencies (cached layer when lock unchanged)
+COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
 # Application code
-COPY backend/ .
+COPY app/ app/
+COPY bootstrap/ bootstrap/
+COPY config/ config/
+COPY database/ database/
+COPY public/ public/
+COPY resources/views/ resources/views/
+COPY routes/ routes/
+COPY storage/ storage/
+COPY artisan .
+COPY .env.example .
 
-# Finish composer: re-install to register all packages, generate autoloader, discover providers
+# Finish composer: autoloader + provider discovery
 RUN composer install --no-dev --optimize-autoloader --prefer-dist
 
 # Create data directories

@@ -1,24 +1,26 @@
 # =============================================================================
 # Cellar UI — Dockerfile
-# Vue 3 + Vite — multi-stage build
+# Vue 3 + Vite — multi-stage build (standalone SPA for compose dev setup)
 # =============================================================================
 
 # ---- Build stage ----
-FROM node:20-alpine AS build
+FROM node:25-alpine AS build
 
 WORKDIR /app
 
-COPY frontend/package.json frontend/package-lock.json* ./
+COPY package.json package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-COPY frontend/ .
+COPY vite.config.ts tsconfig.json env.d.ts ./
+COPY resources/ resources/
 RUN npm run build
 
 # ---- Production stage ----
 FROM nginx:alpine
 
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /app/public/build /usr/share/nginx/html/build
+COPY public/logo.svg /usr/share/nginx/html/logo.svg
 
 EXPOSE 80
 
