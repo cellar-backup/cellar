@@ -1,0 +1,101 @@
+# =============================================================================
+# Cellar — Trivy Suppression Review
+#
+# Runs monthly to check if suppressed CVEs in .trivyignore have been fixed
+# upstream. Opens an issue if any can be removed.
+# =============================================================================
+
+name: Review Trivy Suppressions
+
+on:
+  schedule:
+    # First Monday of every month at 09:00 UTC
+    - cron: '0 9 1-7 * 1'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  review:
+    name: Check suppressed CVEs
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Parse .trivyignore and check CVE status
+        id: check
+        run: |
+          echo "## Trivy Suppression Review" > report.md
+          echo "" >> report.md
+          echo "Checking if suppressed CVEs have been fixed upstream." >> report.md
+          echo "" >> report.md
+
+          REMOVABLE=0
+          TOTAL=0
+
+          while IFS= read -r line; do
+            # Skip comments and empty lines
+            [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+
+            CVE=$(echo "$line" | awk '{print $1}')
+            TOTAL=$((TOTAL + 1))
+
+            # Query NVD/OSV for fix status
+            STATUS=$(curl -s "https://api.osv.dev/v1/vulns/$CVE" 2>/dev/null | jq -r '.withdrawn // empty' 2>/dev/null)
+            MODIFIED=$(curl -s "https://api.osv.dev/v1/vulns/$CVE" 2>/dev/null | jq -r '.modified // "unknown"' 2>/dev/null)
+
+            # Check if the CVE has been withdrawn (fixed/retracted)
+            if [ -n "$STATUS" ]; then
+              echo "- :white_check_mark: **$CVE** — Withdrawn/fixed. Can be removed." >> report.md
+              REMOVABLE=$((REMOVABLE + 1))
+            else
+              # Get the added date from .trivyignore comment
+              ADDED=$(grep -B 5 "^$CVE" .trivyignore | grep "Added:" | sed 's/.*Added: //' | tr -d ' ')
+              if [ -n "$ADDED" ]; then
+                DAYS_AGO=$(( ($(date +%s) - $(date -d "$ADDED" +%s 2>/dev/null || echo $(date +%s))) / 86400 ))
+                if [ "$DAYS_AGO" -gt 90 ]; then
+                  echo "- :warning: **$CVE** — Suppressed for ${DAYS_AGO} days. Review if still needed." >> report.md
+                  REMOVABLE=$((REMOVABLE + 1))
+                else
+                  echo "- :hourglass: **$CVE** — Suppressed ${DAYS_AGO} days ago. Still waiting for upstream fix." >> report.md
+                fi
+              else
+                echo "- :grey_question: **$CVE** — No added date found. Review manually." >> report.md
+                REMOVABLE=$((REMOVABLE + 1))
+              fi
+            fi
+          done < .trivyignore
+
+          echo "" >> report.md
+          echo "**Total suppressed:** $TOTAL | **Needs review:** $REMOVABLE" >> report.md
+
+          echo "removable=$REMOVABLE" >> $GITHUB_OUTPUT
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+
+      - name: Open issue if CVEs need review
+        if: steps.check.outputs.removable > 0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if an open issue already exists
+          EXISTING=$(gh issue list --label "trivy-review" --state open --json number -q '.[0].number')
+
+          if [ -n "$EXISTING" ]; then
+            # Update existing issue
+            gh issue comment "$EXISTING" --body "$(cat report.md)"
+            echo "Updated existing issue #$EXISTING"
+          else
+            # Create new issue
+            gh issue create \
+              --title "Review Trivy suppressed CVEs (${{ steps.check.outputs.removable }} of ${{ steps.check.outputs.total }} need attention)" \
+              --body "$(cat report.md)" \
+              --label "trivy-review,security"
+            echo "Created new issue"
+          fi
+
+      - name: Summary
+        run: |
+          echo "### Trivy Suppression Review" >> $GITHUB_STEP_SUMMARY
+          cat report.md >> $GITHUB_STEP_SUMMARY

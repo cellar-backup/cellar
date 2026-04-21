@@ -1,18 +1,44 @@
-# Trivy vulnerability suppressions
-# Format: CVE-ID [expiry] [# comment]
+# =============================================================================
+# Trivy Vulnerability Suppressions
 #
+# This file tells Trivy to ignore specific CVEs during container scanning.
+# Only suppress CVEs that cannot be fixed by us (e.g., vulnerabilities in
+# third-party binaries like restic, kubectl, or borg that embed an older
+# Go/C runtime).
+#
+# NEVER suppress CVEs in our own code or dependencies we control.
+#
+# Format for each entry:
+#   1. Comment block with: Added date, CVE description, affected binary,
+#      fix version, and review instructions.
+#   2. The CVE ID on its own line.
+#
+# Automated review:
+#   A GitHub Action (.github/workflows/trivy-review.yml) runs monthly to
+#   check if suppressed CVEs have been fixed upstream. It opens a GitHub
+#   issue labeled "trivy-review" when entries need attention. You can also
+#   trigger it manually from Actions → "Review Trivy Suppressions".
+#
+# When removing entries:
+#   - Verify the upstream binary (restic, kubectl, borg) has released a
+#     version compiled against the patched runtime.
+#   - Update the binary version in docker/Dockerfile if needed.
+#   - Remove the CVE ID and its comment block from this file.
+# =============================================================================
+
+# Added: 2026-04-20
 # CVE-2026-25679: net/url IPv6 parsing bug in Go stdlib
 # Affects: kubectl binary (embedded Go stdlib v1.25.7)
-# Fix available in Go 1.25.8 / 1.26.1, but no kubectl release
-# compiled against the patched Go runtime is available yet.
-# Track: https://github.com/kubernetes/kubernetes/issues (update kubectl
-# ARG KUBECTL_VERSION once a release with Go 1.25.8+ is published)
+# Fixed in: Go 1.25.8 / 1.26.1
+# Action: update KUBECTL_VERSION in docker/Dockerfile once a release with Go 1.25.8+ ships
 CVE-2026-25679
 
+# Added: 2026-04-20
 # CVE-2026-32280: Go stdlib chain building DoS
 # CVE-2026-32282: Go Root.Chmod follows symlinks
 # Affects: restic binary (embedded Go stdlib v1.25.7)
-# Fixed in Go 1.25.9/1.26.2 — waiting for restic to release with patched Go.
+# Fixed in: Go 1.25.9 / 1.26.2
+# Action: update restic package in docker/Dockerfile once a release with Go 1.26.2+ ships
 CVE-2026-32280
 CVE-2026-32282
 
@@ -21,8 +47,8 @@ CVE-2026-32282
 # CVE-2026-32283: Go TLS key update message flood
 # CVE-2026-35469: Go stdlib vulnerability (high severity)
 # Affects: restic/kubectl binaries (embedded Go stdlib v1.25.7)
-# Fixed in Go 1.25.9/1.26.2 — waiting for upstream binary releases.
-# Review: check if restic/kubectl have released with Go 1.26.2+ and remove these.
+# Fixed in: Go 1.25.9 / 1.26.2
+# Action: check if restic/kubectl have released with Go 1.26.2+ and remove these
 CVE-2026-32281
 CVE-2026-32283
 CVE-2026-35469

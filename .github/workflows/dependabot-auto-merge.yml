@@ -1,0 +1,57 @@
+# =============================================================================
+# Dependabot Auto-Merge
+#
+# Automatically approves and merges Dependabot PRs after CI passes.
+# Only auto-merges patch and minor updates. Major version bumps require
+# manual review.
+# =============================================================================
+
+name: Dependabot Auto-Merge
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-merge Dependabot
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge patch and minor updates
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          gh pr merge "${{ github.event.pull_request.number }}" \
+            --auto --squash \
+            --repo "${{ github.repository }}"
+          echo "Auto-merge enabled for ${{ steps.metadata.outputs.dependency-names }} (${{ steps.metadata.outputs.update-type }})"
+
+      - name: Flag major updates for manual review
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --body "⚠️ **Major version bump** — requires manual review before merging.
+
+          **Package:** ${{ steps.metadata.outputs.dependency-names }}
+          **Update:** ${{ steps.metadata.outputs.previous-version }} → ${{ steps.metadata.outputs.new-version }}
+
+          Please test locally before approving:
+          \`\`\`bash
+          gh pr checkout ${{ github.event.pull_request.number }}
+          npm install && npm run type-check && npm run build
+          \`\`\`"
