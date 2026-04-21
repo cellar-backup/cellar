@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.2](https://github.com/cellar-backup/cellar/compare/v0.14.1...v0.14.2) (2026-04-21)
+
+
+### Bug Fixes
+
+* dependabot auto-merge uses PAT via pull_request_target ([#77](https://github.com/cellar-backup/cellar/issues/77)) ([f007250](https://github.com/cellar-backup/cellar/commit/f00725074203ea07996052adb889d886e2f5e2a5))
+
 ## [0.14.1](https://github.com/cellar-backup/cellar/compare/v0.14.0...v0.14.1) (2026-04-21)
 
 
