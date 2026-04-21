@@ -11,10 +11,16 @@ class SystemController extends Controller
 {
     public function health(): JsonResponse
     {
+        try {
+            $needsSetup = ! AppSetting::get('setup_completed');
+        } catch (\Throwable) {
+            $needsSetup = true;
+        }
+
         return response()->json([
             'status' => 'healthy',
-            'version' => config('app.version', '0.10.0'),
-            'needs_setup' => ! AppSetting::get('setup_completed'),
+            'version' => config('cellar.version', '0.12.0'),
+            'needs_setup' => $needsSetup,
             'checks' => [
                 'database' => $this->checkDatabase(),
                 'redis' => $this->checkRedis(),
@@ -36,7 +42,7 @@ class SystemController extends Controller
     private function checkRedis(): string
     {
         try {
-            Redis::ping();
+            Redis::connection()->ping();
 
             return 'ok';
         } catch (\Throwable) {
