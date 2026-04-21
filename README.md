@@ -175,6 +175,55 @@ A sample manifest is provided in [`docker/kubernetes/cellar.yaml`](docker/kubern
 kubectl apply -f docker/kubernetes/cellar.yaml
 ```
 
+### Reverse Proxy
+
+Cellar uses WebSockets (Laravel Reverb) for real-time job updates. Your reverse proxy must support WebSocket upgrades on the `/app/` path.
+
+**nginx-ingress (Kubernetes):**
+
+```yaml
+annotations:
+  nginx.ingress.kubernetes.io/proxy-read-timeout: "86400"
+  nginx.ingress.kubernetes.io/proxy-send-timeout: "86400"
+  nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+  nginx.ingress.kubernetes.io/configuration-snippet: |
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+```
+
+**Nginx (standalone):**
+
+```nginx
+location /app/ {
+    proxy_pass http://cellar:8420;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 86400s;
+}
+
+location / {
+    proxy_pass http://cellar:8420;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+**Caddy:**
+
+```caddyfile
+cellar.example.com {
+    reverse_proxy cellar:8420
+}
+```
+
+Caddy handles WebSocket upgrades automatically.
+
+> **Important:** Set `TRUSTED_PROXIES=*` (or your proxy's IP) so Laravel recognizes HTTPS behind the proxy. Without this, asset URLs will be generated as `http://` causing mixed-content errors.
+
 ## Roadmap
 
 | Phase          | Version    | Status | Focus |

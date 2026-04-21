@@ -8,16 +8,20 @@ import Pusher from "pusher-js";
  * Singleton Laravel Echo instance connected to the Reverb WebSocket server.
  *
  * - Uses the Pusher protocol (Reverb is Pusher-compatible)
- * - Connects via the Caddy proxy on the same host (no CORS issues)
+ * - Connects via the reverse proxy on the same host (no CORS issues)
  * - No authentication needed — we use public channels for homelab simplicity
  */
+
+const isTLS = window.location.protocol === "https:";
+const port = Number(window.location.port) || (isTLS ? 443 : 80);
+
 const echo = new Echo({
   broadcaster: "reverb",
   key: (window as unknown as Record<string, string>).__REVERB_KEY__ ?? "cellar-key",
   wsHost: window.location.hostname,
-  wsPort: Number(window.location.port) || 8420,
-  wssPort: Number(window.location.port) || 8420,
-  forceTLS: window.location.protocol === "https:",
+  wsPort: port,
+  wssPort: port,
+  forceTLS: isTLS,
   enabledTransports: ["ws", "wss"],
   disableStats: true,
 });
