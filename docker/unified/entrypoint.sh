@@ -27,6 +27,7 @@ APP_ENV=production
 APP_KEY=
 APP_DEBUG=false
 APP_URL=${APP_URL:-http://localhost:8420}
+TRUSTED_PROXIES=${TRUSTED_PROXIES:-*}
 DB_CONNECTION=sqlite
 DB_DATABASE=${DB_DATABASE:-/app/data/cellar.sqlite}
 REDIS_HOST=${REDIS_HOST:-redis}
@@ -53,7 +54,7 @@ fi
 sed -i 's|REVERB_HOST=cellar-reverb|REVERB_HOST=127.0.0.1|' /app/.env
 
 # ── Allow runtime env-var overrides ──────────────
-for VAR in DB_DATABASE REDIS_HOST REDIS_PORT REDIS_PASSWORD REDIS_DB APP_URL SANCTUM_STATEFUL_DOMAINS; do
+for VAR in DB_DATABASE REDIS_HOST REDIS_PORT REDIS_PASSWORD REDIS_DB APP_URL TRUSTED_PROXIES SANCTUM_STATEFUL_DOMAINS; do
     eval VAL=\${$VAR:-}
     if [ -n "$VAL" ]; then
         sed -i "s|^${VAR}=.*|${VAR}=${VAL}|" /app/.env

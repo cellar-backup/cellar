@@ -112,6 +112,7 @@ cellar/
 | `DB_DATABASE` | `/app/data/cellar.sqlite` | SQLite path |
 | `REDIS_HOST` | `redis` | Redis for queue/cache |
 | `QUEUE_CONNECTION` | `redis` | Job queue driver |
+| `TRUSTED_PROXIES` | `*` | Trusted proxy IPs (`*` = all, for Docker/K8s) |
 | `CELLAR_MAX_PARALLEL_JOBS` | `2` | Concurrent job limit |
 | `CELLAR_ADMIN_PASSWORD` | _(none)_ | Initial admin password |
 | `REVERB_HOST` | `127.0.0.1` | WebSocket server host |

@@ -12,8 +12,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Using Sanctum bearer tokens (not cookie/session auth),
-        // so we don't need the stateful SPA middleware (which requires CSRF).
+        // Trust proxies configured via TRUSTED_PROXIES env var.
+        // Set to '*' to trust all (common in Docker/K8s), or comma-separated IPs.
+        $middleware->trustProxies(
+            at: env('TRUSTED_PROXIES', '*'),
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
