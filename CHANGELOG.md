@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/cellar-backup/cellar/compare/v0.14.0...v0.14.1) (2026-04-21)
+
+
+### Bug Fixes
+
+* use GITHUB_TOKEN for dependabot auto-merge (secrets restricted on dependabot PRs) ([#75](https://github.com/cellar-backup/cellar/issues/75)) ([915631a](https://github.com/cellar-backup/cellar/commit/915631a94ccd27d68ed0693ecc4b7361bf4f4f57))
+
 ## [0.14.0](https://github.com/cellar-backup/cellar/compare/v0.13.5...v0.14.0) (2026-04-21)
 
 
