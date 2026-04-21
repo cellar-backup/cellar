@@ -34,39 +34,55 @@ jobs:
 
           REMOVABLE=0
           TOTAL=0
+          CURRENT_DATE=""
 
+          # First pass: build a map of CVE → Added date by tracking the most
+          # recent "Added:" comment as we read the file top to bottom
+          declare -A CVE_DATES
           while IFS= read -r line; do
-            # Skip comments and empty lines
-            [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
-
-            CVE=$(echo "$line" | awk '{print $1}')
-            TOTAL=$((TOTAL + 1))
-
-            # Query NVD/OSV for fix status
-            STATUS=$(curl -s "https://api.osv.dev/v1/vulns/$CVE" 2>/dev/null | jq -r '.withdrawn // empty' 2>/dev/null)
-            MODIFIED=$(curl -s "https://api.osv.dev/v1/vulns/$CVE" 2>/dev/null | jq -r '.modified // "unknown"' 2>/dev/null)
-
-            # Check if the CVE has been withdrawn (fixed/retracted)
-            if [ -n "$STATUS" ]; then
-              echo "- :white_check_mark: **$CVE** — Withdrawn/fixed. Can be removed." >> report.md
-              REMOVABLE=$((REMOVABLE + 1))
-            else
-              # Get the added date from .trivyignore comment
-              ADDED=$(grep -B 5 "^$CVE" .trivyignore | grep "Added:" | sed 's/.*Added: //' | tr -d ' ')
-              if [ -n "$ADDED" ]; then
-                DAYS_AGO=$(( ($(date +%s) - $(date -d "$ADDED" +%s 2>/dev/null || echo $(date +%s))) / 86400 ))
-                if [ "$DAYS_AGO" -gt 90 ]; then
-                  echo "- :warning: **$CVE** — Suppressed for ${DAYS_AGO} days. Review if still needed." >> report.md
-                  REMOVABLE=$((REMOVABLE + 1))
-                else
-                  echo "- :hourglass: **$CVE** — Suppressed ${DAYS_AGO} days ago. Still waiting for upstream fix." >> report.md
-                fi
-              else
-                echo "- :grey_question: **$CVE** — No added date found. Review manually." >> report.md
-                REMOVABLE=$((REMOVABLE + 1))
-              fi
+            if [[ "$line" =~ ^#.*Added:\ *(.+) ]]; then
+              CURRENT_DATE="${BASH_REMATCH[1]}"
+            elif [[ "$line" =~ ^CVE- ]]; then
+              CVE=$(echo "$line" | awk '{print $1}')
+              CVE_DATES["$CVE"]="$CURRENT_DATE"
             fi
           done < .trivyignore
+
+          # Second pass: check each CVE
+          for CVE in "${!CVE_DATES[@]}"; do
+            TOTAL=$((TOTAL + 1))
+            ADDED="${CVE_DATES[$CVE]}"
+
+            # Query NVD API to check if CVE is still active
+            # (NVD returns vuln data; if status is "Rejected" or "Modified" with
+            # no affected versions, it may be resolved)
+            HTTP_CODE=$(curl -s -o /tmp/cve_response.json -w "%{http_code}" \
+              "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=$CVE" 2>/dev/null)
+
+            REJECTED=""
+            if [ "$HTTP_CODE" = "200" ]; then
+              REJECTED=$(jq -r '.vulnerabilities[0].cve.vulnStatus // ""' /tmp/cve_response.json 2>/dev/null)
+            fi
+
+            if [ "$REJECTED" = "Rejected" ] || [ "$REJECTED" = "Deferred" ]; then
+              echo "- :white_check_mark: **$CVE** — Status: $REJECTED. Can be removed." >> report.md
+              REMOVABLE=$((REMOVABLE + 1))
+            elif [ -n "$ADDED" ]; then
+              DAYS_AGO=$(( ($(date +%s) - $(date -d "$ADDED" +%s 2>/dev/null || echo "$(date +%s)")) / 86400 ))
+              if [ "$DAYS_AGO" -gt 90 ]; then
+                echo "- :warning: **$CVE** — Suppressed for ${DAYS_AGO} days (added $ADDED). Review if upstream has a fix." >> report.md
+                REMOVABLE=$((REMOVABLE + 1))
+              else
+                echo "- :hourglass: **$CVE** — Suppressed ${DAYS_AGO} days ago (added $ADDED). NVD status: ${REJECTED:-Active}." >> report.md
+              fi
+            else
+              echo "- :grey_question: **$CVE** — No added date found. Review manually." >> report.md
+              REMOVABLE=$((REMOVABLE + 1))
+            fi
+
+            # Rate limit: NVD allows ~5 requests per 30 seconds without API key
+            sleep 6
+          done
 
           echo "" >> report.md
           echo "**Total suppressed:** $TOTAL | **Needs review:** $REMOVABLE" >> report.md
