@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.2](https://github.com/cellar-backup/cellar/compare/v0.12.1...v0.12.2) (2026-04-21)
+
+
+### Bug Fixes
+
+* entrypoint creates .env from template when missing ([2510071](https://github.com/cellar-backup/cellar/commit/251007198c637f736d3efdad164c72dbfb1ccdb7))
+
 ## [0.11.0](https://github.com/cellar-backup/cellar/compare/v0.10.1...v0.11.0) (2026-03-30)
 
 
