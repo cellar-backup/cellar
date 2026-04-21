@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/cellar-backup/cellar/compare/v0.13.5...v0.14.0) (2026-04-21)
+
+
+### Features
+
+* automated monthly review of Trivy suppressed CVEs ([#64](https://github.com/cellar-backup/cellar/issues/64)) ([0051b57](https://github.com/cellar-backup/cellar/commit/0051b5730a01ead81b779ce194bc531bb6b3edf2))
+
 ## [0.13.5](https://github.com/cellar-backup/cellar/compare/v0.13.4...v0.13.5) (2026-04-21)
 
 
