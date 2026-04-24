@@ -23,6 +23,7 @@ class KubernetesDiscovery
         'mysql' => 'mysql',
         'mariadb' => 'mariadb',
         'mongo' => 'mongodb',
+        'couchdb' => 'couchdb',
         'redis' => 'redis',
         'valkey' => 'redis',
         'keydb' => 'redis',
@@ -34,12 +35,13 @@ class KubernetesDiscovery
         5432 => 'postgresql',
         3306 => 'mysql',
         27017 => 'mongodb',
+        5984 => 'couchdb',
         6379 => 'redis',
     ];
 
     /** Well-known database StatefulSet labels / annotations */
     private const DB_LABELS = [
-        'app.kubernetes.io/component' => ['database', 'db', 'postgresql', 'mysql', 'mariadb', 'mongodb', 'redis', 'primary', 'master'],
+        'app.kubernetes.io/component' => ['database', 'db', 'postgresql', 'mysql', 'mariadb', 'mongodb', 'couchdb', 'redis', 'primary', 'master'],
     ];
 
     private string $kubectlPath;
@@ -577,10 +579,12 @@ class KubernetesDiscovery
         'mysql-password', 'mysql-root-password',
         'postgres-password', 'postgresql-password',
         'mongodb-password', 'mongodb-root-password',
+        'couchdb-password', 'couchdb-admin-password',
         'redis-password',
         // Usernames
         'username', 'db-username', 'database-username',
         'mariadb-user', 'mysql-user', 'postgres-user', 'mongodb-user',
+        'couchdb-user', 'couchdb-username', 'couchdb-admin-username',
         'user',
         // Database name
         'database', 'database-name', 'db-name', 'dbname',
@@ -789,6 +793,7 @@ class KubernetesDiscovery
             'postgresql' => 5432,
             'mysql', 'mariadb' => 3306,
             'mongodb' => 27017,
+            'couchdb' => 5984,
             'redis' => 6379,
             default => 0,
         };

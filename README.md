@@ -27,7 +27,7 @@
 Existing backup tools force you to choose between **power** (borgmatic, restic CLI) and **polish** (GUI-only tools limited to database dumps). Cellar bridges the gap:
 
 - **Deduplication-first** — powered by BorgBackup / restic, store only unique data blocks
-- **Database + filesystem** — native support for PostgreSQL, MySQL, MongoDB, SQLite, Redis, plus any directory or Docker volume
+- **Database + filesystem** — native support for PostgreSQL, MySQL, MariaDB, MongoDB, CouchDB, SQLite, Redis, plus any directory or Docker volume
 - **Kubernetes Radar** — auto-discover databases and volumes in your clusters
 - **Beautiful wine-themed UI** — a modern Vue 3 interface with dark/light themes, timeline views, and spring animations
 - **Single container** — one image, one port, two volumes — deploy in seconds
