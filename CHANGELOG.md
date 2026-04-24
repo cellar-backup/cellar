@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/cellar-backup/cellar/compare/v0.14.3...v0.15.0) (2026-04-24)
+
+
+### Features
+
+* add CouchDB support ([#82](https://github.com/cellar-backup/cellar/issues/82)) ([5cd2cd0](https://github.com/cellar-backup/cellar/commit/5cd2cd0c1d657f66070ce6ddb5ca9692304dfe8f))
+
 ## [0.14.3](https://github.com/cellar-backup/cellar/compare/v0.14.2...v0.14.3) (2026-04-21)
 
 
