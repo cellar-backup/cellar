@@ -210,6 +210,7 @@ function typeLabel(type: string): string {
     mariadb: "MariaDB",
     sqlite: "SQLite",
     mongodb: "MongoDB",
+    couchdb: "CouchDB",
     filesystem: "Filesystem",
     other: "Other",
   };
@@ -227,6 +228,7 @@ function dotColorClass(source: Source): string {
   if (type === "postgresql") return "wine";
   if (type === "mysql" || type === "mariadb") return "oak";
   if (type === "mongodb") return "sage";
+  if (type === "couchdb") return "gold";
   if (type === "filesystem") return "gold";
   return "smoke";
 }

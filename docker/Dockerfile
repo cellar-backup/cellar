@@ -35,6 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Database clients
     postgresql-client \
     default-mysql-client \
+    jq \
     # Web server & process manager
     nginx \
     supervisor \
@@ -54,6 +55,13 @@ ARG KUBECTL_VERSION=v1.35.3
 RUN curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/$(dpkg --print-architecture)/kubectl" \
     -o /usr/local/bin/kubectl \
     && chmod +x /usr/local/bin/kubectl
+
+# Install couchdb-dump (danielebailo/couchdb-dump) — bash script for CouchDB backup/restore
+# Pinned to a specific commit since the repo has no versioned releases.
+ARG COUCHDB_DUMP_COMMIT=3644fea72d9bde369492a8e4aac0f591a8593008
+RUN curl -fsSL "https://raw.githubusercontent.com/danielebailo/couchdb-dump/${COUCHDB_DUMP_COMMIT}/couchdb-dump.sh" \
+    -o /usr/local/bin/couchdb-dump \
+    && chmod +x /usr/local/bin/couchdb-dump
 
 # Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer

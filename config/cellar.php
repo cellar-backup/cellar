@@ -16,6 +16,9 @@ return [
     'borg_encryption' => env('CELLAR_BORG_ENCRYPTION', 'repokey-blake2'),
     'restic_path' => env('CELLAR_RESTIC_PATH', '/usr/bin/restic'),
 
+    // Database tool paths
+    'couchdb_dump_path' => env('CELLAR_COUCHDB_DUMP_PATH', '/usr/local/bin/couchdb-dump'),
+
     // Kubernetes discovery
     'kubectl_path' => env('CELLAR_KUBECTL_PATH', '/usr/local/bin/kubectl'),
 

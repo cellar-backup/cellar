@@ -33,8 +33,50 @@ class DatabaseRestorer
         return match ($dbType) {
             'postgresql' => self::restorePostgresql($config, $dumpPath),
             'mysql', 'mariadb' => self::restoreMysql($config, $dumpPath),
+            'couchdb' => self::restoreCouchdb($config, $dumpPath),
             default => new RestoreDbResult(false, "Unsupported database type: {$dbType}"),
         };
+    }
+
+    private static function restoreCouchdb(array $c, string $dumpPath): RestoreDbResult
+    {
+        $host = $c['host'] ?? 'localhost';
+        $port = (string) ($c['port'] ?? 5984);
+        $user = $c['user'] ?? $c['username'] ?? '';
+        $password = $c['password'] ?? '';
+        $database = $c['database'] ?? $c['database_name'] ?? '';
+
+        if (empty($database)) {
+            return new RestoreDbResult(false, 'CouchDB restore requires a database name.');
+        }
+
+        $dumpPathBin = config('cellar.couchdb_dump_path', '/usr/local/bin/couchdb-dump');
+
+        $cmd = [
+            $dumpPathBin,
+            '-r', // restore mode
+            '-H', $host,
+            '-P', $port,
+            '-d', $database,
+            '-f', $dumpPath,
+        ];
+
+        if ($user !== '') {
+            $cmd[] = '-u';
+            $cmd[] = $user;
+        }
+        if ($password !== '') {
+            $cmd[] = '-p';
+            $cmd[] = $password;
+        }
+
+        $result = Process::timeout(3600)->run($cmd);
+
+        if (! $result->successful()) {
+            return new RestoreDbResult(false, 'couchdb-dump restore failed: '.$result->errorOutput());
+        }
+
+        return new RestoreDbResult(true, 'CouchDB restore completed.');
     }
 
     private static function restorePostgresql(array $c, string $dumpPath): RestoreDbResult

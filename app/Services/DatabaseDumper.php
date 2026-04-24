@@ -34,6 +34,7 @@ class DatabaseDumper
         return match ($dbType) {
             'postgresql' => self::dumpPostgresql($config, $outputDir, $onProgress),
             'mysql', 'mariadb' => self::dumpMysql($config, $outputDir, $onProgress),
+            'couchdb' => self::dumpCouchdb($config, $outputDir, $onProgress),
             default => new DumpResult(false, message: "Unsupported database type: {$dbType}"),
         };
     }
@@ -599,5 +600,97 @@ class DatabaseDumper
                 ? 'PostgreSQL dump completed via kubectl exec (TimescaleDB: internal schemas excluded).'
                 : 'PostgreSQL dump completed via kubectl exec (in-pod).',
         );
+    }
+
+    // ── CouchDB ──────────────────────────────────────────────────
+
+    /**
+     * Dump a CouchDB database using couchdb-dump (bash script wrapper around HTTP API).
+     * Outputs a single JSON file containing all documents and attachments (base64).
+     */
+    private static function dumpCouchdb(array $c, string $outputDir, ?Closure $onProgress = null): DumpResult
+    {
+        $host = $c['host'] ?? 'localhost';
+        $port = (string) ($c['port'] ?? 5984);
+        $user = $c['user'] ?? $c['username'] ?? '';
+        $password = $c['password'] ?? '';
+        $database = $c['database'] ?? $c['database_name'] ?? '';
+
+        if (empty($database)) {
+            return new DumpResult(false, message: 'CouchDB dump requires a database name.');
+        }
+
+        $dumpPath = config('cellar.couchdb_dump_path', '/usr/local/bin/couchdb-dump');
+        $outFile = "{$outputDir}/{$database}.couchdb.json";
+
+        $cmd = [
+            $dumpPath,
+            '-b', // backup mode
+            '-H', $host,
+            '-P', $port,
+            '-d', $database,
+            '-f', $outFile,
+        ];
+
+        if ($user !== '') {
+            $cmd[] = '-u';
+            $cmd[] = $user;
+        }
+        if ($password !== '') {
+            $cmd[] = '-p';
+            $cmd[] = $password;
+        }
+
+        // Estimate size from CouchDB info API for progress tracking
+        $estimatedSize = $onProgress ? self::queryCouchdbSize($host, $port, $user, $password, $database) : 0;
+
+        $result = self::runWithProgress(
+            cmd: $cmd,
+            env: [],
+            outputPath: $outFile,
+            estimatedSize: $estimatedSize,
+            onProgress: $onProgress,
+            isDirectory: false,
+        );
+
+        if (! $result->successful()) {
+            return new DumpResult(false, message: 'couchdb-dump failed: '.$result->errorOutput());
+        }
+
+        if (! file_exists($outFile) || filesize($outFile) === 0) {
+            return new DumpResult(false, message: 'couchdb-dump produced empty output.');
+        }
+
+        return new DumpResult(
+            success: true,
+            dumpPath: $outFile,
+            sizeBytes: filesize($outFile),
+            message: 'CouchDB dump completed.',
+        );
+    }
+
+    /**
+     * Query CouchDB /{database} endpoint for disk size (used for progress estimation).
+     */
+    private static function queryCouchdbSize(string $host, string $port, string $user, string $password, string $database): int
+    {
+        $url = sprintf('http://%s:%s/%s', $host, $port, rawurlencode($database));
+        $auth = $user !== '' ? "{$user}:{$password}" : '';
+
+        $cmd = ['curl', '-sS', '--max-time', '10'];
+        if ($auth) {
+            $cmd[] = '-u';
+            $cmd[] = $auth;
+        }
+        $cmd[] = $url;
+
+        $result = Process::timeout(15)->run($cmd);
+        if (! $result->successful()) {
+            return 0;
+        }
+
+        $info = json_decode(trim($result->output()), true);
+
+        return (int) ($info['sizes']['active'] ?? $info['data_size'] ?? 0);
     }
 }

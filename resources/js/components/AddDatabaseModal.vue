@@ -38,6 +38,7 @@ const sourceTypes = [
   { value: "mysql", label: "MySQL", port: 3306 },
   { value: "mariadb", label: "MariaDB", port: 3306 },
   { value: "mongodb", label: "MongoDB", port: 27017 },
+  { value: "couchdb", label: "CouchDB", port: 5984 },
   { value: "sqlite", label: "SQLite", port: null },
   { value: "redis", label: "Redis", port: 6379 },
 ];

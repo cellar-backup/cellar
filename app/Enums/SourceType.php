@@ -8,6 +8,7 @@ enum SourceType: string
     case MySQL = 'mysql';
     case MariaDB = 'mariadb';
     case MongoDB = 'mongodb';
+    case CouchDB = 'couchdb';
     case SQLite = 'sqlite';
     case Redis = 'redis';
     case Directory = 'directory';
@@ -20,6 +21,7 @@ enum SourceType: string
             self::MySQL,
             self::MariaDB,
             self::MongoDB,
+            self::CouchDB,
             self::SQLite,
             self::Redis,
         ]);
@@ -31,6 +33,7 @@ enum SourceType: string
             self::PostgreSQL => 5432,
             self::MySQL, self::MariaDB => 3306,
             self::MongoDB => 27017,
+            self::CouchDB => 5984,
             self::Redis => 6379,
             default => null,
         };

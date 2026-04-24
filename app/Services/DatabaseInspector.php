@@ -87,8 +87,35 @@ class DatabaseInspector
         return match ($sourceType) {
             'postgresql' => $this->listPostgres($host, $port, $user, $pass, $timeout),
             'mysql', 'mariadb' => $this->listMysql($host, $port, $user, $pass, $timeout),
+            'couchdb' => $this->listCouchdb($host, $port, $user, $pass, $timeout),
             default => ['databases' => [], 'error' => "Direct connection not supported for {$sourceType}."],
         };
+    }
+
+    private function listCouchdb(string $host, int $port, ?string $user, ?string $pass, int $timeout): array
+    {
+        $url = sprintf('http://%s:%d/_all_dbs', $host, $port);
+        $cmd = ['curl', '-sS', '--max-time', (string) $timeout];
+        if ($user !== null && $user !== '') {
+            $cmd[] = '-u';
+            $cmd[] = "{$user}:{$pass}";
+        }
+        $cmd[] = $url;
+
+        $result = Process::timeout($timeout + 2)->run($cmd);
+        if (! $result->successful()) {
+            return ['databases' => [], 'error' => 'CouchDB connection failed: '.trim($result->errorOutput())];
+        }
+
+        $dbs = json_decode(trim($result->output()), true);
+        if (! is_array($dbs)) {
+            return ['databases' => [], 'error' => 'Invalid response from CouchDB _all_dbs endpoint.'];
+        }
+
+        // Filter out system databases (prefixed with _)
+        $userDbs = array_values(array_filter($dbs, fn ($db) => ! str_starts_with($db, '_')));
+
+        return ['databases' => $userDbs, 'error' => null];
     }
 
     private function listPostgres(string $host, int $port, ?string $user, ?string $pass, int $timeout): array
