@@ -3,6 +3,8 @@ name: Release Please
 on:
   push:
     branches: [main]
+  # Allow manual re-runs after extended GitHub outages
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,27 +17,103 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+      pr_number: ${{ steps.release.outputs.pr_number }}
 
     steps:
       - uses: actions/checkout@v6
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          fetch-depth: 0
 
-      - uses: googleapis/release-please-action@v5
+      # Run release-please CLI directly in a retry loop with exponential backoff.
+      # GitHub's GraphQL API occasionally returns transient errors ("Something
+      # went wrong while executing your query") — this loop keeps retrying
+      # until success, with a hard timeout cap.
+      - name: Release Please (retry loop)
         id: release
-        with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          release-type: node
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          REPO: ${{ github.repository }}
+          # Maximum total time spent retrying (in seconds). 15 minutes covers
+          # most short outages; longer outages should use workflow_dispatch.
+          MAX_DURATION: 900
+        run: |
+          set -uo pipefail
+
+          run_with_retry() {
+            local cmd_name="$1"; shift
+            local start=$(date +%s)
+            local delay=15
+            local attempt=1
+            local output
+
+            while true; do
+              local elapsed=$(( $(date +%s) - start ))
+              if [ "$elapsed" -gt "$MAX_DURATION" ]; then
+                echo "::error::${cmd_name} timed out after ${MAX_DURATION}s"
+                return 1
+              fi
+
+              echo "::group::${cmd_name} attempt ${attempt} (${elapsed}s elapsed)"
+              if output=$("$@" 2>&1); then
+                echo "$output"
+                echo "::endgroup::"
+                printf '%s' "$output" > /tmp/release-please-output.txt
+                return 0
+              fi
+              echo "$output"
+              echo "::endgroup::"
+
+              # Bail immediately on auth/config errors (won't fix with retry)
+              if echo "$output" | grep -qE 'Bad credentials|Not Found|Unauthorized|invalid token'; then
+                echo "::error::${cmd_name} failed with non-retryable error"
+                return 1
+              fi
+
+              echo "::warning::${cmd_name} failed (attempt ${attempt}); retrying in ${delay}s…"
+              sleep "$delay"
+              attempt=$(( attempt + 1 ))
+              delay=$(( delay * 2 ))
+              [ "$delay" -gt 120 ] && delay=120
+            done
+          }
+
+          # 1. Create / update the release PR
+          run_with_retry "release-pr" \
+            npx --yes release-please release-pr \
+              --token="$GH_TOKEN" \
+              --repo-url="$REPO" \
+              --config-file=release-please-config.json \
+              --manifest-file=.release-please-manifest.json
+
+          # Parse PR number from output (if a release PR was created/updated)
+          PR_NUMBER=$(grep -oE 'pull/[0-9]+' /tmp/release-please-output.txt | head -1 | cut -d/ -f2 || true)
+          echo "pr_number=${PR_NUMBER:-}" >> "$GITHUB_OUTPUT"
+
+          # 2. Create GitHub release if a release PR was just merged
+          run_with_retry "github-release" \
+            npx --yes release-please github-release \
+              --token="$GH_TOKEN" \
+              --repo-url="$REPO" \
+              --config-file=release-please-config.json \
+              --manifest-file=.release-please-manifest.json
+
+          # Parse tag from release output
+          TAG=$(grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' /tmp/release-please-output.txt | head -1 || true)
+          if [ -n "$TAG" ] && grep -q "Created release" /tmp/release-please-output.txt; then
+            echo "release_created=true" >> "$GITHUB_OUTPUT"
+            echo "tag_name=${TAG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "release_created=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Auto-merge release PR
-        if: steps.release.outputs.pr
+        if: steps.release.outputs.pr_number != ''
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
         run: |
-          PR_NUMBER=$(echo '${{ steps.release.outputs.pr }}' | jq -r '.number')
-          gh pr merge "$PR_NUMBER" --auto --squash --repo ${{ github.repository }}
+          gh pr merge "${{ steps.release.outputs.pr_number }}" \
+            --auto --squash --repo "${{ github.repository }}"
 
   # Re-tag the Docker image with the new semver when a release is created.
   # The main ci.yml already builds & pushes on tag pushes, so this just
