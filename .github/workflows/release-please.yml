@@ -3,6 +3,8 @@ name: Release Please
 on:
   push:
     branches: [main]
+  # Allow manual re-trigger after GitHub outages (release-please is idempotent)
+  workflow_dispatch:
 
 permissions:
   contents: write
