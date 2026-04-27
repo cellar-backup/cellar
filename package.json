@@ -41,7 +41,7 @@
     "laravel-vite-plugin": "^3.0.1",
     "picomatch": "^4.0.4",
     "prettier": "^3.4.0",
-    "prettier-plugin-tailwindcss": "^0.7.2",
+    "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.2",
     "vite": "^8.0.9",
