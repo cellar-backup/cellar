@@ -28,7 +28,7 @@ LABEL org.opencontainers.image.description="Container-native backup management p
 LABEL org.opencontainers.image.source="https://github.com/cellar-backup/cellar"
 
 # System dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     # Backup engines
     borgbackup \
     restic \
