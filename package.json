@@ -20,7 +20,7 @@
     "laravel-echo": "^2.3.4",
     "lucide-vue-next": "^0.460.0",
     "pinia": "^3.0.4",
-    "pusher-js": "^8.4.3",
+    "pusher-js": "^8.5.0",
     "radix-vue": "^1.9.0",
     "tailwind-merge": "^3.5.0",
     "vue": "^3.5.33",
