@@ -26,12 +26,20 @@
 #   - Remove the CVE ID and its comment block from this file.
 # =============================================================================
 
-# Added: 2026-04-20
-# CVE-2026-25679: net/url IPv6 parsing bug in Go stdlib
-# Affects: kubectl binary (embedded Go stdlib v1.25.7)
-# Fixed in: Go 1.25.8 / 1.26.1
-# Action: update KUBECTL_VERSION in docker/Dockerfile once a release with Go 1.25.8+ ships
-CVE-2026-25679
+# Added: 2026-05-15
+# CVE-2026-33811: LookupCNAME DoS via long CNAME chain (cgo DNS resolver)
+# CVE-2026-33814: HTTP/2 SETTINGS frame infinite loop
+# CVE-2026-39820: ParseAddress/ParseAddressList/ParseMediaType DoS
+# CVE-2026-39836: NUL byte panic in Dial/LookupPort (Windows)
+# CVE-2026-42499: consumePhrase DoS in mail header parsing
+# Affects: kubectl binary (embedded Go stdlib v1.25.9)
+# Fixed in: Go 1.25.10 / 1.26.3
+# Action: remove once kubectl ships with Go 1.25.10+
+CVE-2026-33811
+CVE-2026-33814
+CVE-2026-39820
+CVE-2026-39836
+CVE-2026-42499
 
 # Added: 2026-04-20
 # CVE-2026-32280: Go stdlib chain building DoS
@@ -45,10 +53,9 @@ CVE-2026-32282
 # Added: 2026-04-21
 # CVE-2026-32281: Go crypto/x509 DoS via inefficient certificate chain validation
 # CVE-2026-32283: Go TLS key update message flood
-# CVE-2026-35469: Go stdlib vulnerability (high severity)
-# Affects: restic/kubectl binaries (embedded Go stdlib v1.25.7)
-# Fixed in: Go 1.25.9 / 1.26.2
-# Action: check if restic/kubectl have released with Go 1.26.2+ and remove these
+# Affects: restic binary (embedded Go stdlib v1.25.7)
+# Fixed in: Go 1.25.9 / 1.26.2 (kubectl patched via v1.35.5)
+# Action: remove once restic ships with Go 1.26.2+
 CVE-2026-32281
 CVE-2026-32283
 CVE-2026-35469
