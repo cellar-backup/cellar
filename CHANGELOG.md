@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/cellar-backup/cellar/compare/v0.16.0...v0.16.1) (2026-05-24)
+
+
+### Bug Fixes
+
+* log version on startup and fix Release Please sync for config/cellar.php ([#123](https://github.com/cellar-backup/cellar/issues/123)) ([d0dec88](https://github.com/cellar-backup/cellar/commit/d0dec8841e714c9c04b6d62c7eab4b1801897346))
+
 ## [0.16.0](https://github.com/cellar-backup/cellar/compare/v0.15.1...v0.16.0) (2026-05-24)
 
 
