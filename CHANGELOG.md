@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.3](https://github.com/cellar-backup/cellar/compare/v0.16.2...v0.16.3) (2026-05-24)
+
+
+### Bug Fixes
+
+* use explicit generic type for config/cellar.php in extra-files ([#128](https://github.com/cellar-backup/cellar/issues/128)) ([a2364db](https://github.com/cellar-backup/cellar/commit/a2364dbe34ae839849a9badadaae9dcc9b1469fe))
+
 ## [0.16.2](https://github.com/cellar-backup/cellar/compare/v0.16.1...v0.16.2) (2026-05-24)
 
 
