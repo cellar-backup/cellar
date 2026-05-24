@@ -8,7 +8,7 @@
 
 set -e
 
-VERSION=$(php -r "echo (include '/app/config/cellar.php')['version'];" 2>/dev/null || echo "unknown")
+VERSION=$(grep -oE "[0-9]+\.[0-9]+\.[0-9]+" /app/config/cellar.php 2>/dev/null | head -1 || echo "unknown")
 echo "Cellar v${VERSION} — starting up …"
 
 # ── Data directories ─────────────────────────────
