@@ -12,6 +12,7 @@
       "tag-separator": "",
       "changelog-sections": [
         { "type": "feat",     "section": "✨ Features" },
+        { "type": "fix",      "scope": "security", "section": "🔒 Security" },
         { "type": "fix",      "section": "🐛 Bug Fixes" },
         { "type": "perf",     "section": "⚡ Performance" },
         { "type": "refactor", "section": "♻️ Refactoring" },
