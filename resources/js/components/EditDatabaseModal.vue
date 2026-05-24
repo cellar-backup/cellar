@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from "vue";
 import { useSourcesStore, type Source } from "@/stores/sources";
 import { useSettingsStore, type Profile } from "@/stores/settings";
 import { useToast } from "@/composables/useToast";
+import { useConfirm } from "@/composables/useConfirm";
 
 const props = defineProps<{
   source: Source | null;
@@ -11,11 +12,13 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
   saved: [];
+  deleted: [];
 }>();
 
 const sourcesStore = useSourcesStore();
 const settingsStore = useSettingsStore();
 const toast = useToast();
+const { confirm } = useConfirm();
 
 const form = ref({
   name: "",
@@ -36,6 +39,7 @@ const customCron = ref("0 */3 * * *");
 const currentPlanId = ref<string | null>(null);
 
 const saving = ref(false);
+const deleting = ref(false);
 const error = ref("");
 
 // Profiles
@@ -179,6 +183,30 @@ async function handleSave() {
     saving.value = false;
   }
 }
+
+async function handleDelete() {
+  if (!props.source) return;
+  const name = form.value.name || props.source.display_label;
+  const confirmed = await confirm({
+    title: "Delete database",
+    message: `Delete "${name}"? All backup history and configuration will be permanently removed. This cannot be undone.`,
+    confirmLabel: "Delete",
+    variant: "danger",
+  });
+  if (!confirmed) return;
+  deleting.value = true;
+  error.value = "";
+  try {
+    await sourcesStore.deleteSource(props.source.id);
+    toast.push({ title: "Database deleted", desc: name, type: "success" });
+    emit("deleted");
+    emit("close");
+  } catch {
+    error.value = "Failed to delete database";
+  } finally {
+    deleting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -311,7 +339,9 @@ async function handleSave() {
         </div>
 
         <div class="modal-footer">
-          <div />
+          <button class="btn btn-danger-ghost" :disabled="deleting" @click="handleDelete">
+            {{ deleting ? 'Deleting…' : 'Delete database' }}
+          </button>
           <div class="modal-footer-actions">
             <button class="btn btn-ghost" @click="emit('close')">Cancel</button>
             <button class="btn btn-primary" :disabled="saving" @click="handleSave">
@@ -533,5 +563,23 @@ async function handleSave() {
 .modal-footer-actions {
   display: flex;
   gap: 8px;
+}
+
+.btn-danger-ghost {
+  color: var(--color-danger);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 0 4px;
+  font-size: 13px;
+  transition: color var(--duration-fast) var(--ease-out),
+              background var(--duration-fast) var(--ease-out);
+}
+.btn-danger-ghost:hover:not(:disabled) {
+  background: var(--color-danger-soft);
+  border-color: color-mix(in oklch, var(--color-danger) 20%, transparent);
+}
+.btn-danger-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>
