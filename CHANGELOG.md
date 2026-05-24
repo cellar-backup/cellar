@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.4](https://github.com/cellar-backup/cellar/compare/v0.16.3...v0.16.4) (2026-05-24)
+
+
+### Bug Fixes
+
+* switch config/cellar.php to block annotation for release-please ([#130](https://github.com/cellar-backup/cellar/issues/130)) ([5af98f8](https://github.com/cellar-backup/cellar/commit/5af98f8a6bc35f2964185b3cee969e1f5472459d))
+
 ## [0.16.3](https://github.com/cellar-backup/cellar/compare/v0.16.2...v0.16.3) (2026-05-24)
 
 
