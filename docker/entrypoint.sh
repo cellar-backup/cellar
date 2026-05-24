@@ -8,7 +8,8 @@
 
 set -e
 
-echo "Cellar — starting up …"
+VERSION=$(php -r "echo (include '/app/config/cellar.php')['version'];" 2>/dev/null || echo "unknown")
+echo "Cellar v${VERSION} — starting up …"
 
 # ── Data directories ─────────────────────────────
 mkdir -p /app/data /app/data/logs /data/repositories /var/log/nginx
