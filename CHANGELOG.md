@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/cellar-backup/cellar/compare/v0.15.0...v0.15.1) (2026-05-24)
+
+
+### Bug Fixes
+
+* **security:** route security commits through fix(security) to trigger patch releases ([#118](https://github.com/cellar-backup/cellar/issues/118)) ([571674e](https://github.com/cellar-backup/cellar/commit/571674e7fd3ce4b251554fb50b46189f82ef4009))
+
 ## [0.15.0](https://github.com/cellar-backup/cellar/compare/v0.14.3...v0.15.0) (2026-04-24)
 
 
