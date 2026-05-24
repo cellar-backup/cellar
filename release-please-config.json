@@ -25,7 +25,7 @@
       "extra-files": [
         "package-lock.json",
         "composer.json",
-        { "type": "generic", "path": "config/cellar.php" }
+        "config/cellar.php"
       ]
     }
   }

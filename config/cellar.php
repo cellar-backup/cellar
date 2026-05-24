@@ -8,7 +8,9 @@ return [
     |--------------------------------------------------------------------------
     */
 
-    'version' => '0.16.1', // x-release-please-version
+    // x-release-please-start-version
+    'version' => '0.16.3',
+    // x-release-please-end
 
     // Backup engine paths
     'borg_path' => env('CELLAR_BORG_PATH', '/usr/bin/borg'),
