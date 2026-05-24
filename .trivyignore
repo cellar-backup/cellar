@@ -54,8 +54,7 @@ CVE-2026-32282
 # CVE-2026-32281: Go crypto/x509 DoS via inefficient certificate chain validation
 # CVE-2026-32283: Go TLS key update message flood
 # Affects: restic binary (embedded Go stdlib v1.25.7)
-# Fixed in: Go 1.25.9 / 1.26.2 (kubectl patched via v1.35.5)
+# Fixed in: Go 1.25.9 / 1.26.2
 # Action: remove once restic ships with Go 1.26.2+
 CVE-2026-32281
 CVE-2026-32283
-CVE-2026-35469
