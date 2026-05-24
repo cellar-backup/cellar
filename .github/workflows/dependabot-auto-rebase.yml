@@ -1,0 +1,39 @@
+# =============================================================================
+# Dependabot Auto-Rebase
+#
+# Whenever main is updated, comments "@dependabot rebase" on every open
+# Dependabot PR so they stay up to date with the base branch automatically.
+# Uses RELEASE_PLEASE_TOKEN so the comment is treated as a collaborator
+# request that Dependabot will act on.
+# =============================================================================
+
+name: Dependabot Auto-Rebase
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  rebase:
+    name: Rebase open Dependabot PRs
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Rebase open Dependabot PRs
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          gh pr list \
+            --repo "${{ github.repository }}" \
+            --author "dependabot[bot]" \
+            --state open \
+            --json number \
+            --jq '.[].number' | \
+          while read -r pr; do
+            gh pr comment "$pr" \
+              --repo "${{ github.repository }}" \
+              --body "@dependabot rebase"
+            echo "Requested rebase for PR #$pr"
+          done
