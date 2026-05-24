@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.2](https://github.com/cellar-backup/cellar/compare/v0.16.1...v0.16.2) (2026-05-24)
+
+
+### Bug Fixes
+
+* extract version via grep instead of PHP include ([#126](https://github.com/cellar-backup/cellar/issues/126)) ([1184261](https://github.com/cellar-backup/cellar/commit/1184261b9f849dd53980e71894cc13b39301aa8e))
+
 ## [0.16.1](https://github.com/cellar-backup/cellar/compare/v0.16.0...v0.16.1) (2026-05-24)
 
 
