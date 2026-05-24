@@ -10,7 +10,7 @@
 # =============================================================================
 
 # ── Stage 1: Build frontend ──────────────────────────────────
-FROM node:25-alpine AS frontend-build
+FROM node:26-alpine AS frontend-build
 
 WORKDIR /build
 COPY package.json package-lock.json* ./
