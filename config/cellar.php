@@ -9,7 +9,7 @@ return [
     */
 
     // x-release-please-start-version
-    'version' => '0.16.5',
+    'version' => '0.16.6',
     // x-release-please-end
 
     // Backup engine paths
