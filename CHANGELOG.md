@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.6](https://github.com/cellar-backup/cellar/compare/v0.16.5...v0.16.6) (2026-05-25)
+
+
+### 🐛 Bug Fixes
+
+* remove stale version fallback from SystemController ([#134](https://github.com/cellar-backup/cellar/issues/134)) ([7c09bfb](https://github.com/cellar-backup/cellar/commit/7c09bfbdc46232dec88809ec9d0477196b170dc0))
+
 ## [0.16.5](https://github.com/cellar-backup/cellar/compare/v0.16.4...v0.16.5) (2026-05-25)
 
 
