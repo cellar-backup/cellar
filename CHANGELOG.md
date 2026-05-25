@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.5](https://github.com/cellar-backup/cellar/compare/v0.16.4...v0.16.5) (2026-05-25)
+
+
+### 🐛 Bug Fixes
+
+* remove release-type input from release-please action ([#132](https://github.com/cellar-backup/cellar/issues/132)) ([618cf19](https://github.com/cellar-backup/cellar/commit/618cf192b9d04ffe87ac85fbc027a89c87e1e282))
+
 ## [0.16.4](https://github.com/cellar-backup/cellar/compare/v0.16.3...v0.16.4) (2026-05-24)
 
 
