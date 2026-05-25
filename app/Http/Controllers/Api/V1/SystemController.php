@@ -19,7 +19,7 @@ class SystemController extends Controller
 
         return response()->json([
             'status' => 'healthy',
-            'version' => config('cellar.version', '0.12.0'),
+            'version' => config('cellar.version'),
             'needs_setup' => $needsSetup,
             'checks' => [
                 'database' => $this->checkDatabase(),
